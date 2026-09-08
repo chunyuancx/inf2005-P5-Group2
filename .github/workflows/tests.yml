@@ -1,0 +1,46 @@
+name: Automated tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Python tests and mock verification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.0.0
+        with:
+          python-version: '3.13.3'
+
+      - name: Check Python syntax and Tkinter availability
+        run: |
+          python -m compileall -q src tests
+          python -c "import tkinter; print('Tkinter available; GUI tests run without a display.')"
+
+      - name: Run automated tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Run mock scenarios and generate evidence
+        if: ${{ !cancelled() }}
+        run: python -m src.testing --output-dir test-evidence
+
+      - name: Upload mock test evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: mock-verification-evidence
+          path: test-evidence/
+          if-no-files-found: warn
+          retention-days: 14
