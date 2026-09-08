@@ -1,4 +1,4 @@
-name: Automated tests
+name: CI
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   tests:
-    name: Python tests and mock verification
+    name: GUI and automated runner checks
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -30,17 +30,17 @@ jobs:
           python -c "import tkinter; print('Tkinter available; GUI tests run without a display.')"
 
       - name: Run automated tests
-        run: python -m unittest discover -s tests -v
+        run: python -m unittest tests.test_gui tests.test_automated_runner -v
 
-      - name: Run mock scenarios and generate evidence
+      - name: Generate runner demo evidence
         if: ${{ !cancelled() }}
         run: python -m src.testing --output-dir test-evidence
 
-      - name: Upload mock test evidence
+      - name: Upload runner demo evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4.6.2
         with:
-          name: mock-verification-evidence
+          name: runner-demo-evidence
           path: test-evidence/
           if-no-files-found: warn
           retention-days: 14

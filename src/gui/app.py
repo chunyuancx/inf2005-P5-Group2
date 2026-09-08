@@ -5,7 +5,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from src.controllers import ApplicationController
 from src.exceptions import IntegrationError
-from src.testing.mock_scenarios import build_mock_scenarios
+from src.testing.demo_scenarios import build_demo_scenarios
 from src.testing.runner import AutomatedTestRunner
 
 
@@ -21,7 +21,7 @@ class ApplicationWindow:
         self.lsb = tk.StringVar(value="1")
         self.output = tk.StringVar(value="Choose an original or stego file to begin.")
         self.verdict = tk.StringVar(value="Not verified")
-        self.test_output = tk.StringVar(value="Run the mock suite to generate a new evidence folder.")
+        self.test_output = tk.StringVar(value="Run the reporting demo to generate a new evidence folder.")
         self.test_summary = tk.StringVar(value="No test run yet")
         root.title("Media Integrity | Protect & Verify")
         root.geometry("1140x860")
@@ -100,12 +100,12 @@ class ApplicationWindow:
         self.statuses_table = self._table(result, (("stage", "Verification stage", 240), ("status", "Status", 540)), height=4)
 
     def _build_testing(self, parent):
-        ttk.Label(parent, text="Automated verification checks", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(parent, text="MOCK SERVICES  /  Images + audio  /  LSB 1–8", style="Muted.TLabel").pack(anchor="w", pady=(6, 12))
-        ttk.Label(parent, text="Compare expected and actual verdicts across the mock scenario matrix.\nThese results test application behavior; they do not verify the selected file.", justify="left").pack(anchor="w", pady=(0, 14))
+        ttk.Label(parent, text="Automated test runner", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(parent, text="REPORTING DEMO  /  Canned results  /  No media processing", style="Muted.TLabel").pack(anchor="w", pady=(6, 12))
+        ttk.Label(parent, text="Demonstrate expected-versus-actual reporting using two canned results.\nThis does not run integration tests or verify the selected file.", justify="left").pack(anchor="w", pady=(0, 14))
         toolbar = ttk.Frame(parent)
         toolbar.pack(fill="x", pady=(0, 14))
-        self.test_button = ttk.Button(toolbar, text="Run mock suite…", style="Primary.TButton", command=self.run_tests)
+        self.test_button = ttk.Button(toolbar, text="Run reporting demo…", style="Primary.TButton", command=self.run_tests)
         self.test_button.pack(side="left")
         ttk.Label(toolbar, textvariable=self.test_summary, style="Heading.TLabel").pack(side="left", padx=18)
         self.results_table = self._table(parent, (("case", "Scenario", 330), ("expected", "Expected", 150), ("actual", "Actual", 150), ("result", "Result", 70)), height=9)
@@ -254,8 +254,8 @@ class ApplicationWindow:
             return
         self._clear_table(self.results_table)
         self.test_summary.set("Running…")
-        self.test_output.set("Running mock scenarios and writing evidence…")
-        self._submit(lambda: self.runner.run(build_mock_scenarios(), destination),
+        self.test_output.set("Processing canned results and writing evidence…")
+        self._submit(lambda: self.runner.run(build_demo_scenarios(), destination),
                      self._show_report, self._test_error)
 
     def _show_report(self, report):
@@ -264,11 +264,11 @@ class ApplicationWindow:
                 row["actual"] or "Execution error", "PASS" if row["passed"] else "FAIL"),
                 tags=("pass" if row["passed"] else "fail",))
         self.test_summary.set(f"{report['passed']}/{report['total']} passed · {report['failed']} failed")
-        self.test_output.set(f"MOCK tests: {report['passed']}/{report['total']} passed; {report['failed']} failed.\nEvidence: {report['evidence_dir']}")
+        self.test_output.set(f"Runner demo: {report['passed']}/{report['total']} passed; {report['failed']} failed.\nEvidence: {report['evidence_dir']}")
 
     def _test_error(self, exc):
         self.test_summary.set("Run failed")
-        self.test_output.set(f"Cannot complete mock test run: {exc}")
+        self.test_output.set(f"Cannot complete reporting demo: {exc}")
 
     def save(self):
         if self.busy or self.protected is None:

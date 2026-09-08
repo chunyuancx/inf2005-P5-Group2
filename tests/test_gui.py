@@ -140,14 +140,14 @@ class GuiCallbackTests(unittest.TestCase):
     @patch("src.gui.app.filedialog.askdirectory", return_value="evidence")
     def test_mock_results_remain_separate_from_file_verification(self, dialog):
         self.window.runner.run.return_value = {
-            "passed": 127, "total": 128, "failed": 1, "evidence_dir": "evidence/run-1",
+            "passed": 1, "total": 2, "failed": 1, "evidence_dir": "evidence/run-1",
             "results": [{"name": "exception", "expected": "Cannot Verify", "actual": None,
                          "passed": False}]}
         self.window.run_tests()
         cases, destination = self.window.runner.run.call_args.args
-        self.assertEqual((len(cases), destination), (128, "evidence"))
+        self.assertEqual((len(cases), destination), (2, "evidence"))
         text = self.window.test_output.set.call_args.args[0]
-        self.assertIn("MOCK tests: 127/128", text)
+        self.assertIn("Runner demo: 1/2", text)
         self.assertIn("1 failed", text)
         self.assertIn("evidence/run-1", text)
         self.window.results_table.insert.assert_called_once_with(
