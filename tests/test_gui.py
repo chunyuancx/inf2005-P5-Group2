@@ -205,6 +205,55 @@ class GuiCallbackTests(unittest.TestCase):
             self.assertFalse(self.window.busy)
             self.window.protect_button.configure.assert_called_with(state="normal")
 
+    def test_drag_preserves_loaded_media_and_running_operation(self):
+        del self.window._submit
+        media = Media(b"protected", ".png", MediaType.IMAGE)
+        self.window.protected = media
+        self.window.root.state.return_value = "normal"
+        self.window.root.winfo_x.return_value = 100
+        self.window.root.winfo_y.return_value = 80
+        event = Mock(x_root=140, y_root=100)
+        event.widget.winfo_class.return_value = "Canvas"
+        release = threading.Event()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            self.window.executor = executor
+            success, failure = Mock(), Mock()
+            self.window._submit(lambda: release.wait(5), success, failure)
+            try:
+                self.window._start_drag(event)
+                event.x_root, event.y_root = 190, 160
+                self.window._drag_window(event)
+                self.window._stop_drag(event)
+                self.window.root.geometry.assert_called_once_with("+150+140")
+                self.assertTrue(self.window.busy)
+                self.assertIs(self.window.protected, media)
+                for variable in (self.window.path, self.window.lsb, self.window.output,
+                                 self.window.verdict, self.window.test_output):
+                    variable.set.assert_not_called()
+                self.window.statuses_table.delete.assert_not_called()
+                success.assert_not_called()
+            finally:
+                release.set()
+            executor.shutdown(wait=True)
+            self.window.root.after.call_args.args[1]()
+            success.assert_called_once_with(True)
+            failure.assert_not_called()
+            self.assertFalse(self.window.busy)
+            self.assertIs(self.window.protected, media)
+
+    def test_drag_does_not_capture_controls_or_maximized_window(self):
+        self.window.root.state.return_value = "normal"
+        for widget_class in ("TButton", "TEntry", "TCombobox", "Treeview", "TNotebook", "TScrollbar"):
+            event = Mock(x_root=10, y_root=10)
+            event.widget.winfo_class.return_value = widget_class
+            self.window._start_drag(event)
+            self.window._drag_window(event)
+        self.window.root.state.return_value = "zoomed"
+        event.widget.winfo_class.return_value = "Canvas"
+        self.window._start_drag(event)
+        self.window._drag_window(event)
+        self.window.root.geometry.assert_not_called()
+
     @patch("src.gui.app.messagebox.showinfo")
     def test_close_waits_for_active_operation(self, info):
         self.window.busy = True

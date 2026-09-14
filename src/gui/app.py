@@ -7,15 +7,17 @@ from src.controllers import ApplicationController
 from src.exceptions import IntegrationError
 from src.testing.demo_scenarios import build_demo_scenarios
 from src.testing.runner import AutomatedTestRunner
+from src.gui.theme import ACCENT, BACKDROP, INSET, MUTED, PANEL, TEXT, CosmicHeader, GlassCard
 
 
 class ApplicationWindow:
-    def __init__(self, root: tk.Tk, controller: ApplicationController,
-                 runner: AutomatedTestRunner | None = None):
+    def _initialize_state(self, root, controller, runner=None):
+        """Shared workflow state for the native and glass desktop views."""
         self.root, self.controller = root, controller
         self.runner = runner or AutomatedTestRunner()
         self.protected = None
         self.busy = False
+        self._drag_offset = None
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.path = tk.StringVar()
         self.lsb = tk.StringVar(value="1")
@@ -23,41 +25,71 @@ class ApplicationWindow:
         self.verdict = tk.StringVar(value="Not verified")
         self.test_output = tk.StringVar(value="Run the reporting demo to generate a new evidence folder.")
         self.test_summary = tk.StringVar(value="No test run yet")
+
+    def __init__(self, root: tk.Tk, controller: ApplicationController,
+                 runner: AutomatedTestRunner | None = None):
+        self._initialize_state(root, controller, runner)
         root.title("Media Integrity | Protect & Verify")
-        root.geometry("1140x860")
-        root.minsize(940, 780)
-        root.configure(background="#edf2f4")
+        root.geometry("1140x940")
+        root.minsize(940, 860)
+        root.configure(background=BACKDROP)
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._configure_styles()
-        header = tk.Frame(root, bg="#12382f", padx=28, pady=22)
-        header.pack(fill="x")
-        tk.Label(header, text="INF2005  /  MEDIA AUTHENTICATION", bg="#12382f", fg="#b9ddcb",
-                 font=("Helvetica", 10, "bold")).pack(anchor="w")
-        tk.Label(header, text="Media Integrity", bg="#12382f", fg="white",
-                 font=("Helvetica", 27, "bold")).pack(anchor="w", pady=(6, 3))
-        tk.Label(header, text="Protect a file. Verify its integrity. Review test evidence.",
-                 bg="#12382f", fg="#d4e5dd", font=("Helvetica", 12)).pack(anchor="w")
-        body = ttk.Frame(root, padding=(24, 18))
+        header = CosmicHeader(root)
+        header.pack(fill="x", padx=24, pady=(20, 8))
+        body = ttk.Frame(root, padding=(24, 0, 24, 14), style="Backdrop.TFrame")
         body.pack(fill="both", expand=True)
         self.tabs = ttk.Notebook(body)
         self.tabs.pack(fill="both", expand=True)
-        workspace = ttk.Frame(self.tabs, padding=18)
-        testing = ttk.Frame(self.tabs, padding=18)
+        workspace = ttk.Frame(self.tabs, padding=(0, 12, 0, 0), style="Backdrop.TFrame")
+        testing_card = GlassCard(self.tabs)
+        testing = testing_card.content
         self.tabs.add(workspace, text="  Protect & Verify  ")
-        self.tabs.add(testing, text="  Automated Tests  ")
+        self.tabs.add(testing_card, text="  Automated Tests  ")
         self._build_workspace(workspace)
         self._build_testing(testing)
-        ttk.Label(body, text="Service integration pending · Preview and playback will become available with media adapters.",
-                  style="Muted.TLabel").pack(anchor="w", pady=(12, 0))
+        ttk.Label(body, text="Media preview and playback will be available when media adapters are connected.",
+                  style="Footer.TLabel").pack(anchor="w", pady=(10, 0))
         self.lsb.trace_add("write", self.invalidate)
         self.path.trace_add("write", self.invalidate)
+        root.bind("<ButtonPress-1>", self._start_drag, add="+")
+        root.bind("<B1-Motion>", self._drag_window, add="+")
+        root.bind("<ButtonRelease-1>", self._stop_drag, add="+")
+
+    def _start_drag(self, event):
+        self._drag_offset = None
+        # Interactive controls retain normal selection and click behavior.
+        if event.widget.winfo_class() not in {"Canvas", "Frame", "TFrame", "Label", "TLabel"}:
+            return
+        if self.root.state() != "normal":
+            return
+        self._drag_offset = (event.x_root - self.root.winfo_x(),
+                             event.y_root - self.root.winfo_y())
+
+    def _drag_window(self, event):
+        if self._drag_offset is not None:
+            x = event.x_root - self._drag_offset[0]
+            y = event.y_root - self._drag_offset[1]
+            # Position only: preserve loaded media, widgets and pending callbacks.
+            self.root.geometry(f"+{x}+{y}")
+
+    def _stop_drag(self, _event):
+        self._drag_offset = None
+
+    @staticmethod
+    def _workspace_card(parent, title, **layout):
+        card = GlassCard(parent, title)
+        card.grid(**layout)
+        content = ttk.Frame(card.content)
+        content.pack(fill="both", expand=True)
+        return content
 
     def _build_workspace(self, parent):
         parent.columnconfigure(0, weight=3)
         parent.columnconfigure(1, weight=2)
         parent.rowconfigure(2, weight=1)
-        source = ttk.LabelFrame(parent, text="01 / Source file", padding=14)
-        source.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+        source = self._workspace_card(parent, "01 / SOURCE FILE", row=0, column=0,
+                                      columnspan=2, sticky="ew", pady=(0, 12))
         source.columnconfigure(0, weight=1)
         ttk.Label(source, text="Original file → Protect    •    Received stego file → Verify",
                   style="Muted.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
@@ -65,8 +97,8 @@ class ApplicationWindow:
         self.browse_button = ttk.Button(source, text="Choose file…", command=self.choose)
         self.browse_button.grid(row=1, column=1)
         ttk.Label(source, text="PNG / BMP images  ·  PCM WAV audio", style="Muted.TLabel").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        actions = ttk.LabelFrame(parent, text="02 / Protect or verify", padding=14)
-        actions.grid(row=1, column=0, sticky="nsew", padx=(0, 12), pady=(0, 12))
+        actions = self._workspace_card(parent, "02 / PROTECT & VERIFY", row=1,
+                                      column=0, sticky="nsew", padx=(0, 12), pady=(0, 12))
         settings = ttk.Frame(actions)
         settings.pack(fill="x", pady=(0, 10))
         ttk.Label(settings, text="LSB depth", style="Heading.TLabel").pack(side="left", padx=(0, 12))
@@ -83,8 +115,8 @@ class ApplicationWindow:
         self.verify_button.grid(row=0, column=1, sticky="ew")
         self.save_button = ttk.Button(actions, text="Save stego file…", command=self.save, state="disabled")
         self.save_button.pack(fill="x", pady=(8, 0))
-        preview = ttk.LabelFrame(parent, text="Media preview", padding=14)
-        preview.grid(row=1, column=1, sticky="nsew", pady=(0, 12))
+        preview = self._workspace_card(parent, "MEDIA PREVIEW", row=1, column=1,
+                                      sticky="nsew", pady=(0, 12))
         ttk.Label(preview, text="Original  →  Stego", style="Heading.TLabel").pack(anchor="w")
         ttk.Label(preview, text="Image comparison is awaiting integration.", style="Muted.TLabel", wraplength=290).pack(anchor="w", pady=(8, 12))
         ttk.Separator(preview).pack(fill="x", pady=(0, 10))
@@ -93,8 +125,8 @@ class ApplicationWindow:
         play.pack(fill="x")
         ttk.Button(play, text="Play original", state="disabled").pack(side="left", padx=(0, 8))
         ttk.Button(play, text="Play stego", state="disabled").pack(side="left")
-        result = ttk.LabelFrame(parent, text="03 / File verification result", padding=14)
-        result.grid(row=2, column=0, columnspan=2, sticky="nsew")
+        result = self._workspace_card(parent, "03 / VERIFICATION RESULT", row=2,
+                                     column=0, columnspan=2, sticky="nsew")
         ttk.Label(result, textvariable=self.verdict, style="Verdict.TLabel").pack(anchor="w")
         ttk.Label(result, textvariable=self.output, wraplength=820, justify="left").pack(anchor="w", pady=(6, 10))
         self.statuses_table = self._table(result, (("stage", "Verification stage", 240), ("status", "Status", 540)), height=4)
@@ -109,8 +141,8 @@ class ApplicationWindow:
         self.test_button.pack(side="left")
         ttk.Label(toolbar, textvariable=self.test_summary, style="Heading.TLabel").pack(side="left", padx=18)
         self.results_table = self._table(parent, (("case", "Scenario", 330), ("expected", "Expected", 150), ("actual", "Actual", 150), ("result", "Result", 70)), height=9)
-        self.results_table.tag_configure("pass", foreground="#166448")
-        self.results_table.tag_configure("fail", foreground="#b42318")
+        self.results_table.tag_configure("pass", foreground="#8fe0c3")
+        self.results_table.tag_configure("fail", foreground="#ff9aaf")
         evidence = ttk.LabelFrame(parent, text="Test evidence", padding=12)
         evidence.pack(fill="x", pady=(12, 0))
         ttk.Label(evidence, textvariable=self.test_output, wraplength=820, justify="left").pack(anchor="w")
@@ -136,19 +168,50 @@ class ApplicationWindow:
     def _configure_styles(self):
         style = ttk.Style(self.root)
         style.theme_use("clam")
-        style.configure(".", font=("Helvetica", 11), background="#edf2f4", foreground="#203c37")
-        style.configure("Muted.TLabel", foreground="#5b6c70", font=("Helvetica", 10))
-        style.configure("Heading.TLabel", font=("Helvetica", 11, "bold"))
-        style.configure("Title.TLabel", font=("Helvetica", 19, "bold"))
-        style.configure("Verdict.TLabel", font=("Helvetica", 18, "bold"))
-        style.configure("TLabelframe", bordercolor="#cbd6d6", relief="solid")
-        style.configure("TLabelframe.Label", font=("Helvetica", 10, "bold"))
-        style.configure("TButton", padding=(12, 9), background="white")
-        style.configure("Primary.TButton", background="#176d54", foreground="white")
-        style.map("Primary.TButton", background=[("disabled", "#d2dcda"), ("active", "#10563f")], foreground=[("disabled", "#647571")])
-        style.configure("TNotebook.Tab", padding=(16, 10))
-        style.configure("Treeview", rowheight=27, fieldbackground="white", background="white")
-        style.configure("Treeview.Heading", font=("Helvetica", 10, "bold"), padding=7)
+        style.configure(".", font=("Segoe UI", 10), background=PANEL, foreground=TEXT,
+                        bordercolor="#51465f", lightcolor="#51465f", darkcolor=PANEL,
+                        troughcolor=PANEL, selectbackground="#65507d", selectforeground=TEXT)
+        style.configure("Backdrop.TFrame", background=BACKDROP)
+        style.configure("Muted.TLabel", foreground=MUTED, font=("Segoe UI", 9))
+        style.configure("Footer.TLabel", foreground="#51415e", background=BACKDROP,
+                        font=("Segoe UI", 9))
+        style.configure("Heading.TLabel", font=("Segoe UI", 11, "bold"))
+        style.configure("CardTitle.TLabel", foreground=ACCENT, font=("Segoe UI", 9, "bold"))
+        style.configure("Title.TLabel", font=("Segoe UI", 23, "bold"))
+        style.configure("Verdict.TLabel", foreground=ACCENT, font=("Segoe UI", 23))
+        style.configure("TLabelframe", bordercolor="#51465f", relief="solid")
+        style.configure("TLabelframe.Label", foreground=ACCENT, font=("Segoe UI", 10, "bold"))
+        style.configure("TButton", padding=(14, 7), background=INSET, borderwidth=1,
+                        focusthickness=1, focuscolor=ACCENT)
+        style.map("TButton", background=[("disabled", "#292633"), ("pressed", "#51425f"),
+                                        ("active", "#42364f")],
+                  foreground=[("disabled", "#8c8099")])
+        style.configure("Primary.TButton", background=ACCENT, foreground=PANEL)
+        style.map("Primary.TButton", background=[("disabled", "#3b3249"),
+                  ("pressed", "#bc8bd8"), ("active", "#ecc7fc")],
+                  foreground=[("disabled", "#9c8bab"), ("!disabled", PANEL)])
+        for name in ("TEntry", "TCombobox"):
+            style.configure(name, fieldbackground=INSET, foreground=TEXT, padding=7,
+                            arrowcolor=ACCENT, insertcolor=TEXT)
+            style.map(name, fieldbackground=[("readonly", INSET), ("disabled", PANEL)],
+                      foreground=[("disabled", "#8c8099"), ("readonly", TEXT)])
+        self.root.option_add("*TCombobox*Listbox.background", INSET)
+        self.root.option_add("*TCombobox*Listbox.foreground", TEXT)
+        self.root.option_add("*TCombobox*Listbox.selectBackground", "#65507d")
+        style.configure("TNotebook", background=BACKDROP, borderwidth=0, tabmargins=(0, 0, 0, 0))
+        style.configure("TNotebook.Tab", padding=(18, 10), background="#b9a8c8", foreground="#493a56")
+        style.map("TNotebook.Tab", background=[("selected", PANEL), ("active", "#e3d3ed")],
+                  foreground=[("selected", TEXT)])
+        style.configure("Treeview", rowheight=26, fieldbackground=INSET, background=INSET,
+                        foreground=TEXT, borderwidth=0)
+        style.map("Treeview", background=[("selected", "#65507d")], foreground=[("selected", TEXT)])
+        style.configure("Treeview.Heading", background="#363044", foreground=ACCENT,
+                        font=("Segoe UI", 9, "bold"), padding=8, relief="flat")
+        style.map("Treeview.Heading", background=[("active", "#443751")])
+        style.configure("TScrollbar", background="#51425f", arrowcolor=MUTED,
+                        borderwidth=0, troughcolor=PANEL)
+        style.map("TScrollbar", background=[("active", "#756087")])
+        style.configure("TSeparator", background="#51465f")
 
     @staticmethod
     def _clear_table(table):
