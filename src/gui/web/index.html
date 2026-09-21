@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Media Integrity — Glass workspace</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="cosmos" aria-hidden="true"><div class="aurora aurora-one"></div><div class="aurora aurora-two"></div><div class="aurora aurora-three"></div><div class="stars"></div><div class="orbital orbital-one"></div><div class="orbital orbital-two"></div></div>
+  <svg class="symbol-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6Z"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 14h8M8 17h5"/></symbol>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/></symbol>
+    <symbol id="grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+    <symbol id="flask" viewBox="0 0 24 24"><path d="M9 3h6m-5 0v7L4 20c-.3.5 0 1 1 1h14c1 0 1.3-.5 1-1l-6-10V3M7 15h10"/></symbol>
+    <symbol id="image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1"/><path d="m3 17 6-6 4 4 3-3 5 5"/></symbol>
+  </defs></svg>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#workspace" aria-label="Media Integrity home"><span class="brand-symbol"><svg><use href="#shield"/></svg></span><span>media<span class="brand-light">integrity</span><small>YOUR PRIVATE MEDIA WORKSPACE</small></span></a>
+      <nav class="view-switch" aria-label="Workspace views"><button class="active" data-view="workspace"><svg><use href="#grid"/></svg>Workspace</button><button data-view="testing"><svg><use href="#flask"/></svg>Test studio</button></nav>
+      <div class="session"><span class="live-dot"></span><span id="connection">Local session</span><button class="icon-button" id="close" aria-label="Close application" title="Close application">×</button></div>
+    </header>
+    <section class="intro">
+      <div><h1>Trust what you <em>share.</em></h1><p>Your media, protected. Its integrity, crystal clear.</p></div>
+    </section>
+
+    <main id="workspace" class="board" aria-label="Media workspace">
+      <section class="glass preview-card" aria-label="Media preview">
+        <header class="card-heading"><span>MEDIA PREVIEW</span></header>
+        <div class="card-content preview-layout">
+          <div class="preview-description"><h2>Your media, side by side.</h2><p class="muted">Compare your original with its protected output.</p><p class="tiny muted">Image comparison and audio playback will be available when media adapters are connected.</p></div>
+          <div class="preview-pane"><span class="pane-label">ORIGINAL</span><svg aria-hidden="true"><use href="#image"/></svg><span class="tiny muted">Source media preview</span></div>
+          <div class="preview-pane protected-pane"><span class="pane-label">PROTECTED</span><svg aria-hidden="true"><use href="#shield"/></svg><span class="tiny muted">Stego media preview</span></div>
+        </div>
+      </section>
+      <div class="steps-grid" aria-label="Processing steps">
+      <section class="glass source-card">
+        <header class="card-heading"><span><span class="section-number">01</span> SOURCE</span></header>
+        <div class="card-content"><h2>Start with your media<span class="accent">.</span></h2><p class="muted">Choose an original to protect, or a stego file to verify.</p>
+          <button class="file-picker" data-action="choose" data-control="browse_button"><span class="file-orb"><svg><use href="#upload"/></svg></span><span class="file-copy"><strong id="filename">Choose a media file</strong><small id="filedetail">Browse files on your device</small></span><span class="round-arrow"><svg><use href="#arrow"/></svg></span></button>
+          <div class="card-foot"><div class="format-chips"><span>PNG</span><span>BMP</span><span>WAV</span></div><span class="tiny muted">Your file stays on this device</span></div>
+        </div>
+      </section>
+
+      <section class="glass settings-card">
+        <header class="card-heading"><span><span class="section-number">02</span> PROTECTION</span></header>
+        <div class="card-content"><div class="depth-heading"><h2>A finer layer.</h2><span class="depth-value"><b id="depth-value">1</b><small>BIT LSB</small></span></div>
+          <div class="depth-selector" role="group" aria-label="LSB depth"><button data-depth="1" aria-pressed="true">1</button><button data-depth="2" aria-pressed="false">2</button><button data-depth="3" aria-pressed="false">3</button><button data-depth="4" aria-pressed="false">4</button><button data-depth="5" aria-pressed="false">5</button><button data-depth="6" aria-pressed="false">6</button><button data-depth="7" aria-pressed="false">7</button><button data-depth="8" aria-pressed="false">8</button></div>
+          <p class="tiny muted depth-note">Use the same depth to protect and verify.</p>
+          <div class="actions"><button class="primary-button" data-action="protect" data-control="protect_button"><svg><use href="#shield"/></svg>Protect file</button><button class="secondary-button" data-action="verify" data-control="verify_button">Verify<svg><use href="#arrow"/></svg></button></div>
+        </div>
+      </section>
+
+      <section class="glass result-card">
+        <header class="card-heading"><span><span class="section-number">03</span> VERIFICATION</span><span class="status-pill" id="activity"><span class="live-dot"></span>STANDING BY</span></header>
+        <div class="card-content"><div class="result-heading"><div><h2 class="verdict" id="verdict">Not verified<span class="muted"> yet.</span></h2><p id="output" class="muted" role="status" aria-live="polite">Choose an original or stego file to begin.</p></div><div class="result-mark" aria-hidden="true"><svg><use href="#shield"/></svg></div></div>
+          <div class="progress-track" aria-hidden="true"><span></span></div>
+          <div class="stage-list" id="statuses"><div class="stage-placeholder"><span class="stage-dot"></span><span>Verification stages will appear here</span><span>—</span></div></div>
+          <div class="result-footer"><span class="tiny muted" id="save-hint">Protect your media to create a shareable stego file.</span><button class="secondary-button save-button" data-action="save" data-control="save_button" disabled>Save stego file<svg><use href="#arrow"/></svg></button></div>
+        </div>
+      </section>
+
+      </div>
+    </main>
+
+    <main id="testing" class="board test-board" hidden aria-label="Test studio">
+      <section class="glass demo-card"><header class="card-heading"><span>THE TEST STUDIO</span></header><div class="card-content"><div class="studio-icon"><svg><use href="#flask"/></svg></div><h2>Evidence, beautifully<br>organised.</h2><p class="muted">Explore expected-versus-actual reporting with two canned scenarios.</p><span class="demo-tag">REPORTING DEMO · NO MEDIA PROCESSING</span><button class="primary-button" data-action="run_tests" data-control="test_button">Run reporting demo<svg><use href="#arrow"/></svg></button><p class="tiny muted">This demo does not verify the selected file or run integration tests.</p></div></section>
+      <section class="glass report-card"><header class="card-heading"><span>SCENARIO RESULTS</span></header><div class="card-content"><h2 id="test-summary">No test run yet</h2><div class="report-scroll"><table><thead><tr><th>Scenario</th><th>Expected</th><th>Actual</th><th>Result</th></tr></thead><tbody id="results"></tbody></table><div id="report-empty" class="report-empty"><svg><use href="#flask"/></svg><p>A fresh canvas for your results.</p><small>Run the demo to populate this workspace.</small></div></div></div></section>
+      <section class="glass evidence-card"><header class="card-heading"><span>TEST EVIDENCE</span></header><div class="card-content"><p id="test-output" class="muted">Run the reporting demo to generate a new evidence folder.</p></div></section>
+    </main>
+    <footer class="app-footer"><span><span class="live-dot"></span>LOCAL BY DESIGN</span><span>Made for media. Built on trust.</span><span>PNG / BMP / PCM WAV</span></footer>
+    <div class="toast" id="toast" role="alert" hidden></div>
+  </div>
+</body>
+</html>

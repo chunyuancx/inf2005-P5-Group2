@@ -1,0 +1,2 @@
+# Optional browser regression test driver; not an application dependency.
+websocket-client>=1.0,<2
