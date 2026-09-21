@@ -5,10 +5,17 @@ from src.controllers import ApplicationController
 from src.gui.app import ApplicationWindow
 from src.gui.desktop import launch
 from src.services import UnconfiguredService
+from src.services.image_steganography import ImageSteganography
 
 
 def main():
-    controller = ApplicationController(*(UnconfiguredService() for _ in range(5)))
+    controller = ApplicationController(
+        image=ImageSteganography(),      # Member 1
+        audio=UnconfiguredService(),     # Member 2
+        crypto=UnconfiguredService(),    # Member 3
+        payload=UnconfiguredService(),   # Member 3
+        location=UnconfiguredService(),  # Member 4
+    )
     root = tk.Tk()
     if "--native" in sys.argv:
         ApplicationWindow(root, controller)
