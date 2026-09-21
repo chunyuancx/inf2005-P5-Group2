@@ -146,6 +146,39 @@ class AudioSteganographyTests(
             list(new_samples)
         )
 
+    def test_embed_extract_one_lsb(
+        self
+    ):
+
+        payload = b"Hello"
+
+        stego_bytes = (
+            self.service.embed(
+                self.media,
+                payload,
+                lsb=1,
+                start=100
+            )
+        )
+
+        stego_media = Media(
+            data=stego_bytes,
+            suffix=".wav",
+            kind=MediaType.AUDIO
+        )
+
+        extracted = (
+            self.service.extract(
+                stego_media,
+                lsb=1,
+                start=100
+            )
+        )
+
+        self.assertEqual(
+            extracted,
+            payload
+        )
 
 if __name__ == "__main__":
     unittest.main()
