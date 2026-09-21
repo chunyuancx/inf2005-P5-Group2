@@ -3,7 +3,10 @@ import math
 import struct
 import unittest
 import wave
-
+from src.exceptions import (
+    IntegrationError,
+    PayloadMissing,
+)
 from src.models import Media, MediaType
 from src.services.audio_steganography import (
     WavSteganographyService
@@ -179,6 +182,128 @@ class AudioSteganographyTests(
             extracted,
             payload
         )
+
+    def test_all_lsb_depths(
+        self
+    ):
+
+        payload = (
+            b"INF2005 Audio Steganography"
+        )
+
+        for lsb in range(1, 9):
+
+            with self.subTest(
+                lsb=lsb
+            ):
+
+                stego_bytes = (
+                    self.service.embed(
+                        self.media,
+                        payload,
+                        lsb=lsb,
+                        start=100
+                    )
+                )
+
+                stego_media = Media(
+                    data=stego_bytes,
+                    suffix=".wav",
+                    kind=MediaType.AUDIO
+                )
+
+                extracted = (
+                    self.service.extract(
+                        stego_media,
+                        lsb=lsb,
+                        start=100
+                    )
+                )
+
+                self.assertEqual(
+                    extracted,
+                    payload
+                )
+
+    def test_nonzero_start_location(
+        self
+    ):
+
+        payload = (
+            b"Secret audio payload"
+        )
+
+        start = 2500
+
+        stego_bytes = (
+            self.service.embed(
+                self.media,
+                payload,
+                lsb=2,
+                start=start
+            )
+        )
+
+        stego_media = Media(
+            data=stego_bytes,
+            suffix=".wav",
+            kind=MediaType.AUDIO
+        )
+
+        extracted = (
+            self.service.extract(
+                stego_media,
+                lsb=2,
+                start=start
+            )
+        )
+
+        self.assertEqual(
+            extracted,
+            payload
+        )
+
+    def test_payload_too_large(
+        self
+    ):
+
+        capacity = (
+            self.service.capacity(
+                self.media,
+                lsb=1,
+                start=0
+            )
+        )
+
+        payload = (
+            b"A"
+            * (capacity + 1)
+        )
+
+        with self.assertRaises(
+            IntegrationError
+        ):
+
+            self.service.embed(
+                self.media,
+                payload,
+                lsb=1,
+                start=0
+            )
+
+    def test_unprotected_audio_has_no_payload(
+        self
+    ):
+
+        with self.assertRaises(
+            PayloadMissing
+        ):
+
+            self.service.extract(
+                self.media,
+                lsb=1,
+                start=100
+            )
 
 if __name__ == "__main__":
     unittest.main()
