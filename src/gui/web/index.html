@@ -52,6 +52,10 @@
         <div class="card-content"><div class="depth-heading"><h2>A finer layer.</h2><span class="depth-value"><b id="depth-value">1</b><small>BIT LSB</small></span></div>
           <div class="depth-selector" role="group" aria-label="LSB depth"><button data-depth="1" aria-pressed="true">1</button><button data-depth="2" aria-pressed="false">2</button><button data-depth="3" aria-pressed="false">3</button><button data-depth="4" aria-pressed="false">4</button><button data-depth="5" aria-pressed="false">5</button><button data-depth="6" aria-pressed="false">6</button><button data-depth="7" aria-pressed="false">7</button><button data-depth="8" aria-pressed="false">8</button></div>
           <p class="tiny muted depth-note">Use the same depth to protect and verify.</p>
+          <label class="passphrase-field" for="passphrase"><span>PASSPHRASE</span><input type="password" id="passphrase" data-control="passphrase_box" autocomplete="off" spellcheck="false" placeholder="Enter your secret passphrase"></label>
+          <p class="tiny muted" id="passphrase-hint">Decides where the payload hides. Party B needs this same passphrase — it is never stored in the file.</p>
+          <div class="start-mode" role="group" aria-label="Start location mode"><button id="mode-auto" data-mode="auto" data-control="mode_box" aria-pressed="true">Automatic</button><button id="mode-manual" data-mode="manual" data-control="mode_box" aria-pressed="false">Manual</button><input type="number" id="manual-start" data-control="manual_box" min="1" step="1" placeholder="Position" aria-label="Manual start position"></div>
+          <p class="tiny muted" id="mode-hint">Automatic derives the position from your passphrase — different for every file.</p>
           <div class="actions"><button class="primary-button" data-action="protect" data-control="protect_button"><svg><use href="#shield"/></svg>Protect file</button><button class="secondary-button" data-action="verify" data-control="verify_button">Verify<svg><use href="#arrow"/></svg></button></div>
         </div>
       </section>

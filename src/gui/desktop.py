@@ -46,7 +46,7 @@ class TableState:
 
 class GlassDesktop(ApplicationWindow):
     controls = ("browse_button", "protect_button", "verify_button", "save_button",
-                "test_button", "lsb_box")
+                "test_button", "lsb_box", "passphrase_box", "mode_box", "manual_box")
 
     def __init__(self, root, controller, runner=None):
         self._initialize_state(root, controller, runner)
@@ -69,6 +69,10 @@ class GlassDesktop(ApplicationWindow):
         self.close_deadline = None
         return {
             "path": self.path.get(), "lsb": self.lsb.get(), "busy": self.busy,
+            # Report only that a passphrase is held, never the passphrase itself.
+            "passphrase_set": bool(self.passphrase.get()),
+            "start_mode": self.start_mode.get(),
+            "manual_start": self.manual_start.get(),
             "output": self.output.get(), "verdict": self.verdict.get(),
             "test_output": self.test_output.get(), "test_summary": self.test_summary.get(),
             "protected": self.protected is not None,
@@ -87,7 +91,21 @@ class GlassDesktop(ApplicationWindow):
             return self.snapshot()
         if self.busy:
             return self.snapshot()
-        if name == "depth":
+        if name == "passphrase":
+            value = payload.get("value")
+            if value is not None and not isinstance(value, str):
+                raise ValueError("Passphrase must be text.")
+            self.passphrase.set(value or "")
+        elif name == "start_mode":
+            if payload.get("value") not in {"auto", "manual"}:
+                raise ValueError("Start mode must be automatic or manual.")
+            self.start_mode.set(payload["value"])
+        elif name == "manual_start":
+            value = payload.get("value")
+            if value is not None and not isinstance(value, str):
+                raise ValueError("Start position must be text.")
+            self.manual_start.set(value or "")
+        elif name == "depth":
             depth = payload.get("value")
             if str(depth) not in {str(i) for i in range(1, 9)}:
                 raise ValueError("Choose an LSB depth from 1 to 8.")
