@@ -245,6 +245,66 @@ class WavSteganographyService:
 
         return buffer.getvalue()
 
+    # ------------------------------------------- helpers for other members
+
+    def sample_count(
+        self,
+        media: Media
+    ) -> int:
+        """Embeddable PCM samples, channels interleaved.
+
+        Unchanged by embedding, unlike ``len(media.data)``; use this (not the
+        file length) to derive start locations.  This is the same domain the
+        ``start`` argument of ``embed`` and ``extract`` indexes into.
+        """
+
+        _, samples = (
+            self._read_wav(media)
+        )
+
+        return len(samples)
+
+    def canonical_bytes(
+        self,
+        media: Media,
+        lsb: int
+    ) -> bytes:
+        """Canonical representation for hashing and start-location derivation.
+
+        Format parameters followed by every sample with its low ``lsb`` bits
+        cleared, in the same unsigned 16-bit domain ``_set_sample_lsb`` writes
+        to.  Identical for the cover and its stego object at the same ``lsb``,
+        whatever the start location, because embedding only ever touches the
+        bits this clears.  Not covered (by design): WAV metadata chunks, and
+        changes confined to the low ``lsb`` bits.
+        """
+
+        self._validate_lsb(lsb)
+
+        params, samples = (
+            self._read_wav(media)
+        )
+
+        keep_mask = (
+            0xFFFF ^ ((1 << lsb) - 1)
+        )
+
+        masked = bytearray()
+
+        for sample in samples:
+            masked += (
+                (sample & 0xFFFF) & keep_mask
+            ).to_bytes(2, "little")
+
+        header = (
+            f"{params.nchannels}|"
+            f"{params.sampwidth}|"
+            f"{params.framerate}|"
+            f"{params.nframes}|"
+        ).encode()
+
+        return header + bytes(masked)
+
     def capacity(
         self,
         media: Media,

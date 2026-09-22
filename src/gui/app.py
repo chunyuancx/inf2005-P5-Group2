@@ -21,6 +21,11 @@ class ApplicationWindow:
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.path = tk.StringVar()
         self.lsb = tk.StringVar(value="1")
+        self.passphrase = tk.StringVar()
+        # "auto" derives the start from the passphrase; "manual" uses the typed
+        # position. FR7 allows the user to select or derive the location.
+        self.start_mode = tk.StringVar(value="auto")
+        self.manual_start = tk.StringVar()
         self.output = tk.StringVar(value="Choose an original or stego file to begin.")
         self.verdict = tk.StringVar(value="Not verified")
         self.test_output = tk.StringVar(value="Run the reporting demo to generate a new evidence folder.")
@@ -105,7 +110,23 @@ class ApplicationWindow:
         self.lsb_box = ttk.Combobox(settings, textvariable=self.lsb, values=list(range(1, 9)), state="readonly", width=4)
         self.lsb_box.pack(side="left")
         ttk.Label(settings, text="bits (1–8)", style="Muted.TLabel").pack(side="left", padx=8)
-        ttk.Label(actions, text="Use the same depth for encoding and verification.", style="Muted.TLabel").pack(anchor="w", pady=(0, 12))
+        secret = ttk.Frame(actions)
+        secret.pack(fill="x", pady=(10, 0))
+        ttk.Label(secret, text="Passphrase", style="Heading.TLabel").pack(side="left", padx=(0, 12))
+        self.passphrase_box = ttk.Entry(secret, textvariable=self.passphrase, show="•")
+        self.passphrase_box.pack(side="left", fill="x", expand=True)
+        manual = ttk.Frame(actions)
+        manual.pack(fill="x", pady=(10, 0))
+        self.mode_box = ttk.Checkbutton(manual, text="Choose start position manually",
+                                        variable=self.start_mode,
+                                        onvalue="manual", offvalue="auto")
+        self.mode_box.pack(side="left", padx=(0, 12))
+        self.manual_box = ttk.Entry(manual, textvariable=self.manual_start, width=12)
+        self.manual_box.pack(side="left")
+        ttk.Label(actions, text="Automatic derives the position from your passphrase — different for every file.\n"
+                                "Manual uses the position you type, which is not protected by the passphrase.\n"
+                                "Party B needs the same depth, and whichever of the two you used.",
+                  style="Muted.TLabel", justify="left").pack(anchor="w", pady=(6, 12))
         buttons = ttk.Frame(actions)
         buttons.pack(fill="x")
         buttons.columnconfigure((0, 1), weight=1)
@@ -230,6 +251,34 @@ class ApplicationWindow:
         if path:
             self.path.set(path)
 
+    def _apply_start_location(self):
+        """Configure the start-location service from the two GUI controls.
+
+        Skipped when the configured locator takes neither, so other locator
+        designs and test doubles keep working unchanged.  The controller and
+        the verification engine share one locator instance, so setting it here
+        covers both protect and verify.
+        """
+        locator = getattr(self.controller, "location", None)
+        if not hasattr(type(locator), "key"):
+            return
+        if self.start_mode.get() == "manual":
+            typed = self.manual_start.get().strip()
+            if not typed:
+                raise IntegrationError(
+                    "Enter a start position, or untick manual to derive one.")
+            try:
+                position = int(typed)
+            except ValueError as exc:
+                raise IntegrationError("Start position must be a whole number.") from exc
+            locator.manual_start = position
+            return
+        locator.manual_start = None
+        passphrase = self.passphrase.get()
+        if not passphrase:
+            raise IntegrationError("Enter the start-location passphrase.")
+        locator.key = passphrase
+
     def _inputs(self):
         if not self.path.get():
             raise IntegrationError("Choose an image or audio file first.")
@@ -239,6 +288,7 @@ class ApplicationWindow:
             raise IntegrationError("Choose an LSB depth from 1 to 8.") from exc
         if not 1 <= depth <= 8:
             raise IntegrationError("Choose an LSB depth from 1 to 8.")
+        self._apply_start_location()
         return self.path.get(), depth
 
     def _set_busy(self, busy):
@@ -246,6 +296,8 @@ class ApplicationWindow:
         for button in (self.browse_button, self.protect_button, self.verify_button, self.test_button):
             button.configure(state="disabled" if busy else "normal")
         self.lsb_box.configure(state="disabled" if busy else "readonly")
+        for box in (self.passphrase_box, self.manual_box, self.mode_box):
+            box.configure(state="disabled" if busy else "normal")
         self.save_button.configure(state="normal" if not busy and self.protected is not None else "disabled")
 
     def _submit(self, work, success, failure):
