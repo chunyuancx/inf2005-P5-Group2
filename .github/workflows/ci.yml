@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   tests:
-    name: GUI and automated runner checks
+    name: Unit and integration tests
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -23,6 +23,11 @@ jobs:
         uses: actions/setup-python@v6.0.0
         with:
           python-version: '3.13.3'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
 
       - name: Check Python syntax and Tkinter availability
         run: |
@@ -30,7 +35,7 @@ jobs:
           python -c "import tkinter; print('Tkinter available; GUI tests run without a display.')"
 
       - name: Run automated tests
-        run: python -m unittest tests.test_gui tests.test_automated_runner -v
+        run: python -m pytest -v
 
       - name: Generate runner demo evidence
         if: ${{ !cancelled() }}

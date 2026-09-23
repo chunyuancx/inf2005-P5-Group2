@@ -1,7 +1,8 @@
 # Verification Engine & System Integration — Documentation
 
 Member 5: Hellen
-Files covered: `src/verification/engine.py`, `src/controllers/application.py`
+Files covered: `src/verification/engine.py`, `src/controllers/application.py`,
+`src/services/crypto_adapter.py`, `src/services/payload_service.py`, `src/__main__.py`
 
 ## 1. What this component does
 
@@ -91,12 +92,46 @@ ready to explain in the demo why Wrong Start Location degrades to Payload
 Missing in your design — that's a defensible answer too, but it must be
 stated on purpose, not discovered by the marker.
 
-## 5. Test coverage
+## 5. How the real modules are wired
 
-`tests/test_engine.py` exercises the pipeline against the real
-`ApplicationController`/`VerificationEngine`, using fakes in `tests/fakes.py`
-for the four teammate services (`SteganographyService`, `CryptoService`,
-`PayloadService`, `StartLocationService`).
+`src/__main__.py` builds the controller from the real services:
+
+| Interface | Implementation | Owner |
+|---|---|---|
+| `ImageSteganographyService` | `ImageSteganography` | Member 1 |
+| `AudioSteganographyService` | `WavSteganographyService` | Member 2 |
+| `CryptoService` | `SignatureCrypto` (adapter over `CryptoService`) | Member 3, adapter by Member 5 |
+| `PayloadService` | `EnvelopePayloadService` (built on `models/payload.py`) | Member 3, adapter by Member 5 |
+| `StartLocationService` | `KeyedStartLocation` | Member 4 |
+
+**Crypto adapter.** Member 3's `CryptoService` takes explicit keys and raw
+bytes, so `SignatureCrypto` supplies both:
+
+- `hash_media(media, lsb)` = SHA-256 of the steganography service's
+  `canonical_bytes(media, lsb)` (samples with the reserved low bits cleared).
+- Keys are RSA-2048 (PSS, SHA-256), stored as PEM in
+  `~/.inf2005-stego/keys/`. The pair is created on the first protect; the
+  private key file is owner-only (0600) and unencrypted.
+- Verification never creates keys. With no public key the verdict is
+  **Cannot Verify**, because a freshly generated key could only ever report
+  a misleading Signature Invalid. To verify on another machine, copy
+  `public_key.pem` into that folder.
+
+**Payload envelope.** `>2sHH` = magic `b"P1"` | signed_data length |
+signature length, then signed_data, then signature. The steganography
+services already frame the whole envelope with their own magic and length.
+`signed_data` is Member 3's `Payload` JSON (`media_id`, `timestamp`, `nonce`,
+`metadata`), with the media digest stored in `metadata.digest`, so the
+signature covers the digest. A malformed envelope reads as **Payload
+Missing**; an edit inside a well-formed one fails the signature check.
+
+## 6. Test coverage
+
+Run: `pip install -r requirements-dev.txt`, then `python -m pytest` from the
+repo root. CI runs the same command on every push.
+
+`tests/test_engine.py` exercises the pipeline logic against fakes in
+`tests/fakes.py`:
 
 | Test | Verdict path proven |
 |---|---|
@@ -110,15 +145,29 @@ for the four teammate services (`SteganographyService`, `CryptoService`,
 | `test_selfchecking_locator_raises_wrong_start_location` | Wrong Start Location (fixable design) |
 | `test_naive_locator_cannot_reach_wrong_start_location` | documents the gap in §4 |
 
-Run: `python -m pytest tests -v` from the repo root.
+`tests/test_real_pipeline.py` runs every real service end to end on
+`samples/lambda-icon.png` and `samples/audio/original.wav`, with no fakes:
 
-## 6. Open items for the team
+| Test | Verdict path proven |
+|---|---|
+| `test_authentic_round_trip` | Authentic, PNG and WAV, LSB 1/2/4 |
+| `test_keys_persist_across_sessions` | Authentic after reloading keys from disk |
+| `test_tampered_with_manual_start` | Tampered, PNG and WAV |
+| `test_tampered` (xfail) | documents the limitation in §7 |
+| `test_signature_invalid_with_other_public_key` | Signature Invalid, PNG and WAV |
+| `test_payload_missing_on_unprotected_cover` | Payload Missing, PNG and WAV |
+| `test_wrong_passphrase_reports_payload_missing` | wrong passphrase → Payload Missing (§4) |
+| `test_wrong_lsb_depth_is_not_authentic` | wrong LSB depth never reads as Authentic |
+| `test_verify_without_public_key_cannot_verify` | Cannot Verify |
 
-- [ ] Confirm with Member 4 whether `StartLocationService.recover()` self-checks
-      (see §4). This is the single highest-value fix left for Criterion 1.
-- [ ] Confirm `SteganographyService.extract()` self-frames the payload (magic +
-      length prefix) since the interface gives it no length argument — Members
-      1 and 2 need to know this before they start, not discover it at
-      integration time.
-- [ ] Wire these tests into `.github/workflows/ci.yml` so they run on every
-      push, not just locally.
+## 7. Known limitations with the real start-location service
+
+- **Wrong Start Location** is not produced: `KeyedStartLocation.recover()`
+  re-runs `generate()` without a self-check, so a wrong passphrase reads as
+  **Payload Missing** (§4).
+- **Tampered** is only produced in manual start mode. In passphrase mode the
+  start position is derived from the canonical media content, so editing
+  the content also moves the start, and the payload reads as **Payload
+  Missing**. The file is still rejected, just with a less specific verdict.
+  `test_tampered` is marked `xfail(strict=True)` and will fail loudly once
+  this changes, so the marker can be removed then.
