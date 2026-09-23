@@ -19,7 +19,7 @@ class VerificationEngine:
         stage = "location"
         try:
             start = self.location.recover(media, lsb)
-            statuses[stage] = "Recovered"
+            statuses[stage] = "Computed"
             stage = "payload"
             encoded = steganography.extract(media, lsb, start)
             if not encoded:
