@@ -119,7 +119,7 @@ def test_statuses_are_reported_for_the_gui(tmp_path):
     controller = build()
     out = protect_to_disk(controller, tmp_path, write_png(tmp_path), 2, "stego.png")
     statuses = controller.verify(out, 2).statuses
-    assert statuses["location"] == "Recovered"
+    assert statuses["location"] == "Computed"
     assert statuses["payload"] == "Parsed"
     assert statuses["signature"] == "Valid"
     assert statuses["hash"] == "Match"
