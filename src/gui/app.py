@@ -270,8 +270,34 @@ class ApplicationWindow:
         self._clear_table(self.statuses_table)
         self.output.set("Selection changed. Run protect or verify.")
 
+    def _dialog(self, opener, **options):
+        """Open a native dialog centred on screen and above the app window.
+
+        The glass view keeps the Tk root withdrawn, and a dialog owned by a
+        hidden window can open behind the maximised browser window. A 1x1
+        topmost anchor gives Windows a visible owner to centre on and raise.
+        """
+        anchor = None
+        if isinstance(self.root, tk.Misc):
+            try:
+                anchor = tk.Toplevel(self.root)
+                anchor.overrideredirect(True)
+                anchor.attributes("-topmost", True)
+                width, height = anchor.winfo_screenwidth(), anchor.winfo_screenheight()
+                anchor.geometry(f"1x1+{width // 2}+{height // 2}")
+                anchor.update()
+                options["parent"] = anchor
+            except tk.TclError:
+                anchor = None
+        try:
+            return opener(**options)
+        finally:
+            if anchor is not None:
+                anchor.destroy()
+
     def choose(self):
-        path = filedialog.askopenfilename(filetypes=[("Supported media", "*.png *.bmp *.wav")])
+        path = self._dialog(filedialog.askopenfilename, title="Choose a media file",
+                            filetypes=[("Supported media", "*.png *.bmp *.wav")])
         if path:
             self.path.set(path)
 
@@ -519,7 +545,7 @@ class ApplicationWindow:
     def run_tests(self):
         if self.busy:
             return
-        destination = filedialog.askdirectory(title="Choose test evidence folder")
+        destination = self._dialog(filedialog.askdirectory, title="Choose test evidence folder")
         if not destination:
             return
         self._clear_table(self.results_table)
@@ -554,7 +580,8 @@ class ApplicationWindow:
     def save(self):
         if self.busy or self.protected is None:
             return
-        path = filedialog.asksaveasfilename(defaultextension=self.protected.suffix,
+        path = self._dialog(filedialog.asksaveasfilename, title="Save stego file",
+            defaultextension=self.protected.suffix,
             initialfile=f"{Path(self.path.get()).stem}_stego{self.protected.suffix}",
             filetypes=[("Stego media", f"*{self.protected.suffix}")])
         if path:
