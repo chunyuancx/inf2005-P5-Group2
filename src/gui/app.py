@@ -632,12 +632,13 @@ class ApplicationWindow:
         def done(target):
             self.attack_path.set(str(target))
             self.attack_output.set(f"Saved attacked copy: {target}\nVerifying it…")
-            self._verify_attacked(attack.label, target, depth)
+            self._verify_attacked(attack, target, depth)
 
         self._submit(work, done, lambda exc: self.attack_output.set(f"Attack failed: {exc}"))
 
-    def _verify_attacked(self, label, target, depth):
+    def _verify_attacked(self, attack, target, depth):
         """Verify an attacked copy with the studio's settings, as Party B would."""
+        label = attack.label
         try:
             self._attack_inputs()
         except IntegrationError as exc:
@@ -649,6 +650,12 @@ class ApplicationWindow:
             decoded = getattr(result, "decoded_payload", None)
             if decoded:
                 lines.append(f"Decoded message: {decoded}")
+            if (result.verdict is Verdict.PAYLOAD_MISSING and not attack.targets_payload
+                    and self.attack_start_mode.get() == "auto"):
+                lines.append("Why not Tampered: in Automatic mode the start position is derived from the "
+                             "file content, so any edit moves it and the payload cannot be found "
+                             "(verification docs, section 7). Switch the lab to Manual with the position "
+                             "the file was protected at to see Tampered.")
             lines.append(f"Attacked copy: {target}")
             self.attack_output.set("\n".join(lines))
 

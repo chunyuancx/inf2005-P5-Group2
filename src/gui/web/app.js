@@ -56,7 +56,11 @@ function render(next) {
   $('#attack-filename').textContent = labFile || 'Choose a media file';
   $('#attack-filename').title = next.attack_path || '';
   $('#attack-filedetail').textContent = labFile ? 'Selected for the attack lab' : 'PNG, BMP or WAV on this device';
-  if (document.activeElement !== $('#attack-lsb')) $('#attack-lsb').value = next.attack_lsb;
+  $('#attack-depth-value').textContent = next.attack_lsb;
+  for (const button of $$('[data-attack-depth]')) {
+    button.disabled = requestPending || next.busy;
+    button.setAttribute('aria-pressed', String(button.dataset.attackDepth === next.attack_lsb));
+  }
   const labManual = next.attack_start_mode === 'manual';
   for (const button of $$('[data-attack-mode]')) button.setAttribute('aria-pressed', String(button.dataset.attackMode === next.attack_start_mode));
   $('#attack-manual-start').hidden = !labManual;
@@ -224,7 +228,7 @@ async function poll() {
 const NEEDS_PASSPHRASE = new Set(['protect', 'verify']);
 $('#attack-manual-start').addEventListener('input', () => { labDirty.manual = true; });
 $('#attack-message').addEventListener('input', () => { labDirty.message = true; });
-$('#attack-lsb').addEventListener('change', () => action('attack_lsb', $('#attack-lsb').value));
+$$('[data-attack-depth]').forEach(button => button.addEventListener('click', () => action('attack_lsb', button.dataset.attackDepth)));
 $$('[data-attack-mode]').forEach(button => button.addEventListener('click', () => action('attack_start_mode', button.dataset.attackMode)));
 const NEEDS_PAYLOAD = new Set(['protect']);
 $('#manual-start').addEventListener('input', () => { manualDirty = true; });
