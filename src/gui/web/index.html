@@ -95,6 +95,18 @@
         <p class="tiny muted attack-output" id="attack-output"></p>
         <p class="tiny muted suite-output" id="test-output"></p>
       </div></section>
+      <section class="glass attack-result-card"><header class="card-heading"><span>ATTACK RESULT</span><span class="status-pill" id="attack-activity"><span class="live-dot"></span>STANDING BY</span></header><div class="card-content">
+        <div class="result-heading"><div><h2 class="verdict" id="attack-verdict">Not attacked<span class="muted"> yet.</span></h2><p id="attack-result" class="muted">Run an attack to see how Party B's verification reacts to it.</p></div></div>
+        <div class="decoded-payload" id="attack-decoded-box" hidden><span>DECODED PAYLOAD</span><p id="attack-decoded"></p></div>
+        <div class="stage-list" id="attack-statuses"><div class="stage-placeholder"><span class="stage-dot"></span><span>Verification stages will appear here</span></div></div>
+        <div class="preview-layout attack-compare">
+          <div class="preview-pane" id="pane-attack-source"><span class="pane-label">BEFORE</span><img alt="File before the attack" hidden><audio controls hidden></audio><div class="pane-empty"><svg aria-hidden="true"><use href="#image"/></svg><span class="tiny muted">The file you chose</span></div></div>
+          <div class="preview-pane protected-pane" id="pane-attack-copy"><span class="pane-label">AFTER THE ATTACK</span><img alt="Attacked copy" hidden><audio controls hidden></audio><div class="pane-empty"><svg aria-hidden="true"><use href="#flask"/></svg><span class="tiny muted">The attacked copy</span></div></div>
+          <div class="preview-pane difference-pane" id="pane-attack-difference"><span class="pane-label">WHAT CHANGED, ZOOMED</span><img alt="Changed pixels highlighted" hidden><div class="pane-empty"><svg aria-hidden="true"><use href="#check"/></svg><span class="tiny muted" id="attack-difference-text">Run an attack to see what it changed</span></div></div>
+        </div>
+        <p class="tiny muted" id="attack-compare-note"></p>
+        <p class="tiny muted" id="attack-copy-path"></p>
+      </div></section>
       <section class="glass report-card failed-card"><header class="card-heading"><span>FAILED SCENARIOS</span><span class="count-pill" id="failed-count">0</span></header><div class="card-content"><div class="report-head"><div><h2 id="test-summary">No test run yet</h2><p class="tiny muted" id="report-legend">A scenario fails when its verdict differs from the one expected, or the run raised an error.</p></div><input type="search" id="results-filter" placeholder="Search scenarios, verdicts, notes" aria-label="Filter scenario results" autocomplete="off"></div><div class="report-scroll"><table><thead><tr><th>Scenario</th><th>Expected</th><th>Actual</th><th>Note</th></tr></thead><tbody id="results-failed"></tbody></table><div id="failed-empty" class="report-empty"><svg><use href="#flask"/></svg><p>No failed scenarios.</p><small>Run the attack suite to populate this workspace.</small></div></div></div></section>
       <section class="glass report-card passed-card"><header class="card-heading"><span>PASSED SCENARIOS</span><span class="count-pill" id="passed-count">0</span></header><div class="card-content"><p class="tiny muted">The verdict matched the one expected, whatever the verdict was.</p><div class="report-scroll"><table><thead><tr><th>Scenario</th><th>Expected</th><th>Actual</th><th>Note</th></tr></thead><tbody id="results-passed"></tbody></table><div id="passed-empty" class="report-empty"><svg><use href="#check"/></svg><p>No passed scenarios yet.</p><small>Run the attack suite to populate this workspace.</small></div></div></div></section>
     </main>

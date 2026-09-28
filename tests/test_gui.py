@@ -22,8 +22,11 @@ class GuiCallbackTests(unittest.TestCase):
                      "attack_output", "attack_choice", "attack_path", "attack_lsb",
                      "attack_passphrase", "attack_start_mode", "attack_manual_start", "attack_message",
                      "attack_browse_button", "attack_lsb_box", "attack_passphrase_box",
-                     "attack_mode_box", "attack_manual_box", "attack_message_box"):
+                     "attack_mode_box", "attack_manual_box", "attack_message_box",
+                     "attack_verdict", "attack_result", "attack_decoded", "attack_source",
+                     "attack_copy", "attack_statuses_table"):
             setattr(self.window, name, Mock())
+        self.window.attack_statuses_table.get_children.return_value = ()
         self.window.scenarios = lambda folder: build_demo_scenarios()
         self.window.busy = False
         self.window.protected = None

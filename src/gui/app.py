@@ -16,6 +16,7 @@ from src.gui.theme import ACCENT, BACKDROP, INSET, MUTED, PANEL, TEXT, CosmicHea
 class ApplicationWindow:
     # Class-level defaults so partially constructed windows (tests) still work.
     preview_version = 0      # bumped whenever the preview panes must reload
+    attack_preview_version = 0  # same, for the attack result's before/after panes
     verified_protected = False  # the protected copy passed its self-check; saving allowed
     scenarios = None         # callable(folder) -> scenarios for the test studio; real suite by default
     _progress = None         # (stages, current index) while verification runs
@@ -36,6 +37,12 @@ class ApplicationWindow:
         self.attack_start_mode = tk.StringVar(value="auto")
         self.attack_manual_start = tk.StringVar()
         self.attack_message = tk.StringVar()
+        # Result of the last single attack, shown in the Attack result card.
+        self.attack_verdict = tk.StringVar(value="Not attacked")
+        self.attack_result = tk.StringVar()
+        self.attack_decoded = tk.StringVar()
+        self.attack_source = tk.StringVar()
+        self.attack_copy = tk.StringVar()
         self.protected = None
         self.busy = False
         self._drag_offset = None
@@ -213,7 +220,14 @@ class ApplicationWindow:
         self.attack_box.pack(side="left")
         self.attack_button = ttk.Button(lab, text="Run attack", command=self.attack)
         self.attack_button.pack(side="left", padx=(8, 0))
-        ttk.Label(parent, textvariable=self.attack_output, wraplength=820, justify="left").pack(anchor="w", pady=(0, 14))
+        ttk.Label(parent, textvariable=self.attack_output, wraplength=820, justify="left").pack(anchor="w", pady=(0, 8))
+        ttk.Label(parent, textvariable=self.attack_verdict, style="Verdict.TLabel").pack(anchor="w")
+        ttk.Label(parent, textvariable=self.attack_result, wraplength=820, justify="left").pack(anchor="w", pady=(4, 6))
+        self.attack_statuses_table = self._table(parent, (("stage", "Verification stage", 240), ("status", "Status", 540)), height=4)
+        self.attack_statuses_table.tag_configure("done", foreground="#8fe0c3")
+        self.attack_statuses_table.tag_configure("running", foreground="#e8c5ff")
+        self.attack_statuses_table.tag_configure("pending", foreground="#8d7f9c")
+        ttk.Label(parent, textvariable=self.attack_copy, style="Muted.TLabel", wraplength=820).pack(anchor="w", pady=(4, 14))
         ttk.Label(parent, text="Automated attack suite", style="Title.TLabel").pack(anchor="w")
         ttk.Label(parent, text="Protects the bundled samples and your selected file, runs every attack and verifier case\nin both start modes, and writes JSON, log and Markdown evidence.", justify="left").pack(anchor="w", pady=(6, 10))
         toolbar = ttk.Frame(parent)
@@ -520,7 +534,7 @@ class ApplicationWindow:
 
     # ------------------------------------------------------------ live stages
 
-    def _watch_stages(self):
+    def _watch_stages(self, table=None):
         """Show each verification stage as it starts.
 
         The engine calls ``on_stage`` from the worker thread, so the callback
@@ -533,11 +547,12 @@ class ApplicationWindow:
         stages = tuple(getattr(type(engine), "STAGES", ()))
         if not stages or not hasattr(engine, "on_stage"):
             return lambda handler: handler
-        self._progress = (stages, 0)
+        table = table if table is not None else self.statuses_table
+        self._progress = (stages, 0, table)
         self._draw_progress()
 
         def started(stage):
-            self._progress = (stages, stages.index(stage) if stage in stages else 0)
+            self._progress = (stages, stages.index(stage) if stage in stages else 0, table)
             self._progress_dirty = True
         engine.on_stage = started
 
@@ -552,8 +567,8 @@ class ApplicationWindow:
     def _draw_progress(self):
         if self._progress is None:
             return
-        stages, current = self._progress
-        self._clear_table(self.statuses_table)
+        stages, current, table = self._progress
+        self._clear_table(table)
         for index, stage in enumerate(stages):
             if index < current:
                 status, tag = "Passed", "done"
@@ -561,7 +576,7 @@ class ApplicationWindow:
                 status, tag = "Checking…", "running"
             else:
                 status, tag = "Waiting", "pending"
-            self.statuses_table.insert("", "end", values=(stage.capitalize(), status), tags=(tag,))
+            table.insert("", "end", values=(stage.capitalize(), status), tags=(tag,))
 
     def _verification_error(self, exc):
         self.verdict.set("Cannot Verify")
@@ -604,6 +619,12 @@ class ApplicationWindow:
             self.attack_output.set(str(exc))
             return
         self.attack_output.set(f"Applying '{attack.label}'…")
+        self.attack_verdict.set("Attacking…")
+        self.attack_result.set(f"Applying '{attack.label}' and saving the attacked copy.")
+        self.attack_decoded.set("")
+        self.attack_source.set(path)
+        self.attack_copy.set("")
+        self._clear_table(self.attack_statuses_table)
         # Read the Tk variables here; the worker thread must not touch them.
         where = (f"manual position {self.attack_manual_start.get().strip() or '?'}"
                  if self.attack_start_mode.get() == "manual" else "the position derived from your passphrase")
@@ -645,11 +666,18 @@ class ApplicationWindow:
             return target
 
         def done(target):
-            self.attack_path.set(str(target))
+            # The studio keeps the file you chose, so the next attack starts clean again.
+            self.attack_copy.set(str(target))
+            self.attack_preview_version += 1
             self.attack_output.set(f"Saved attacked copy: {target}\nVerifying it…")
             self._verify_attacked(attack, target, depth)
 
-        self._submit(work, done, lambda exc: self.attack_output.set(f"Attack failed: {exc}"))
+        def failed(exc):
+            self.attack_verdict.set("Attack failed")
+            self.attack_result.set(str(exc))
+            self.attack_output.set(f"Attack failed: {exc}")
+
+        self._submit(work, done, failed)
 
     def _payload_depths(self, media, skip_depth):
         """Other LSB depths at which the studio's settings do find an envelope.
@@ -672,28 +700,38 @@ class ApplicationWindow:
     def _verify_attacked(self, attack, target, depth):
         """Verify an attacked copy with the studio's settings, as Party B would."""
         label = attack.label
+
+        def cannot(exc):
+            self.attack_verdict.set("Cannot Verify")
+            self.attack_result.set(str(exc))
+            self.attack_output.set(f"{label}: Cannot Verify. {exc}")
+
         try:
             self._attack_inputs()
         except IntegrationError as exc:
-            self.attack_output.set(f"{label}: Cannot Verify. {exc}\nAttacked copy: {target}")
+            cannot(exc)
             return
+        self.attack_verdict.set("Verifying…")
+        self.attack_result.set("Checking the attacked copy the way Party B would.")
 
         def show(result):
-            lines = [f"{label}: {result.verdict.value}. {result.message}"]
-            decoded = getattr(result, "decoded_payload", None)
-            if decoded:
-                lines.append(f"Decoded message: {decoded}")
+            self.attack_verdict.set(result.verdict.value)
+            message = result.message
             if (result.verdict is Verdict.PAYLOAD_MISSING and not attack.targets_payload
                     and self.attack_start_mode.get() == "auto"):
-                lines.append("Why not Tampered: in Automatic mode the start position is derived from the "
-                             "file content, so any edit moves it and the payload cannot be found "
-                             "(verification docs, section 7). Switch the lab to Manual with the position "
-                             "the file was protected at to see Tampered.")
-            lines.append(f"Attacked copy: {target}")
-            self.attack_output.set("\n".join(lines))
+                message += (" Why not Tampered: in Automatic mode the start position is derived from the "
+                            "file content, so any edit moves it and the payload cannot be found "
+                            "(verification docs, section 7). Use Manual with the position the file was "
+                            "protected at to see Tampered.")
+            self.attack_result.set(message)
+            self.attack_decoded.set(getattr(result, "decoded_payload", None) or "")
+            self._clear_table(self.attack_statuses_table)
+            for stage, status in result.statuses.items():
+                self.attack_statuses_table.insert("", "end", values=(stage.capitalize(), status))
+            self.attack_output.set(f"{label}: {result.verdict.value}.")
 
-        self._submit(lambda: self.controller.verify(str(target), depth), show,
-                     lambda exc: self.attack_output.set(f"{label}: Cannot Verify. {exc}\nAttacked copy: {target}"))
+        finish = self._watch_stages(self.attack_statuses_table)
+        self._submit(lambda: self.controller.verify(str(target), depth), finish(show), finish(cannot))
 
     def run_tests(self):
         if self.busy:

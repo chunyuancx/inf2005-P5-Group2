@@ -64,6 +64,7 @@ class GlassDesktop(ApplicationWindow):
         self.lsb_box.configure(state="readonly")
         self.attack_lsb_box.configure(state="readonly")
         self.statuses_table, self.results_table = TableState(), TableState()
+        self.attack_statuses_table = TableState()
         self.path.trace_add("write", self.invalidate)
         self.lsb.trace_add("write", self.invalidate)
         self.payload.trace_add("write", self.invalidate)
@@ -92,6 +93,13 @@ class GlassDesktop(ApplicationWindow):
             "attack_start_mode": self.attack_start_mode.get(),
             "attack_manual_start": self.attack_manual_start.get(),
             "attack_message": self.attack_message.get(),
+            "attack_verdict": self.attack_verdict.get(), "attack_result": self.attack_result.get(),
+            "attack_decoded": self.attack_decoded.get(),
+            "attack_source": self.attack_source.get(), "attack_copy": self.attack_copy.get(),
+            "attack_copy_kind": self._kind_of(self.attack_copy.get()),
+            "attack_source_kind": self._kind_of(self.attack_source.get()),
+            "attack_preview_version": self.attack_preview_version,
+            "attack_statuses": list(self.attack_statuses_table.rows.values()),
             # Only the attacks that apply to the studio file's type; none until a file is chosen.
             "attacks": describe(MediaType(self.attack_kind())) if self.attack_kind() else [],
             "protected": self.protected is not None,
@@ -111,9 +119,17 @@ class GlassDesktop(ApplicationWindow):
             return "audio"
         return None
 
-    def attack_kind(self):
-        suffix = Path(self.attack_path.get()).suffix.lower()
+    @staticmethod
+    def _kind_of(path):
+        suffix = Path(path).suffix.lower() if path else ""
         return "image" if suffix in {".png", ".bmp"} else "audio" if suffix == ".wav" else None
+
+    def attack_kind(self):
+        return self._kind_of(self.attack_path.get())
+
+    def attack_sources(self):
+        """Paths of the last attack's source file and attacked copy (Tk thread)."""
+        return {"source": self.attack_source.get(), "copy": self.attack_copy.get()}
 
     def preview_sources(self):
         """Selected path and protected buffer for the preview endpoints.
@@ -260,6 +276,9 @@ def make_server(desktop):
             self.send(200, (assets / name).read_bytes(), types[name])
 
         def send_preview(self, which):
+            if which.startswith("attack-"):
+                self.send_attack_preview(which.removeprefix("attack-"))
+                return
             try:
                 sources = desktop.invoke(desktop.preview_sources)
                 kind = MEDIA_TYPES.get(sources["suffix"])
@@ -287,6 +306,36 @@ def make_server(desktop):
                 pass
             except Exception:
                 # Unreadable media or a size mismatch simply shows no preview.
+                self.send(404, b'{}')
+
+        def send_attack_preview(self, which):
+            """Before/after/difference of the last attack, read from the saved files."""
+            try:
+                paths = desktop.invoke(desktop.attack_sources)
+                source, copy = Path(paths["source"]), Path(paths["copy"])
+                if which == "source" and paths["source"]:
+                    self.send(200, source.read_bytes(), MEDIA_TYPES[source.suffix.lower()])
+                    return
+                if not paths["copy"]:
+                    raise ValueError("No attacked copy yet")
+                if which == "copy":
+                    self.send(200, copy.read_bytes(), MEDIA_TYPES[copy.suffix.lower()])
+                    return
+                if which != "difference":
+                    raise ValueError("Unknown preview")
+                before, after = source.read_bytes(), copy.read_bytes()
+                if MEDIA_TYPES[copy.suffix.lower()].startswith("image/"):
+                    diff = image_difference(before, after)
+                    self.send(200, diff.png, "image/png",
+                              extra={"X-Changed": str(diff.changed), "X-Total": str(diff.total),
+                                     "X-Box": ",".join(map(str, diff.box)) if diff.box else "",
+                                     "X-Scale": f"{diff.scale:.2f}"})
+                else:
+                    changed, total = audio_difference(before, after)
+                    self.send(200, json.dumps({"changed": changed, "total": total}).encode())
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            except Exception:
                 self.send(404, b'{}')
 
         def do_POST(self):

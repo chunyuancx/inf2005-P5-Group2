@@ -54,8 +54,10 @@ show on the next refresh.
   protects. Choose a file, pick an attack for its type, and click Run
   attack simulation. The attacked copy is saved as
   `attacks/<file name>/<date>_<time>_<attack>.<ext>` next to the source
-  (never overwriting), selected, and verified immediately; the verdict is
-  shown in the lab and in the workspace card. The verification step needs
+  (never overwriting) and verified immediately. The Attack result card shows
+  the verdict, the four verification stages, the decoded message if any, and
+  a before/after/what-changed comparison of the attacked copy. The chosen
+  file stays selected, so the next attack starts from the clean stego again. The verification step needs
   the passphrase or manual position the file was protected with, exactly as
   Party B would; payload-level attacks need it before they run, because they
   must find the envelope to rewrite it. Media-level attacks run without it

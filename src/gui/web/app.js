@@ -3,6 +3,7 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 let state = null, requestPending = false, lastRows = '', lastResults = '', closing = false;
 let toastTimer, lastPreview = '', manualDirty = false, lastAttacks = '', payloadDirty = false;
+let lastAttackRows = '', lastAttackPreview = '';
 const labDirty = {manual: false, message: false};
 
 function notify(message) {
@@ -77,20 +78,19 @@ function render(next) {
     describeAttack();
   }
   const rows = JSON.stringify(next.statuses);
-  if (rows !== lastRows) {
-    lastRows = rows;
-    $('#statuses').replaceChildren();
-    if (!next.statuses.length) {
-      const row = document.createElement('div'); row.className = 'stage-placeholder';
-      row.textContent = 'Verification stages will appear here'; $('#statuses').append(row);
-    }
-    for (const row of next.statuses) {
-      const line = document.createElement('div'); line.className = 'stage-row ' + (row.tags || []).join(' ');
-      const mark = document.createElement('span'); mark.className = 'stage-mark'; line.append(mark);
-      for (const value of row.values) { const text = document.createElement('span'); text.textContent = value; line.append(text); }
-      $('#statuses').append(line);
-    }
-  }
+  if (rows !== lastRows) { lastRows = rows; renderStages($('#statuses'), next.statuses); }
+  const attackRows = JSON.stringify(next.attack_statuses || []);
+  if (attackRows !== lastAttackRows) { lastAttackRows = attackRows; renderStages($('#attack-statuses'), next.attack_statuses || []); }
+  // Attack result card.
+  const attacking = next.attack_verdict === 'Attacking…' || next.attack_verdict === 'Verifying…';
+  $('#attack-verdict').textContent = next.attack_verdict === 'Not attacked' ? 'Not attacked yet.' : next.attack_verdict;
+  $('#attack-result').textContent = next.attack_result || "Run an attack to see how Party B's verification reacts to it.";
+  $('#attack-decoded').textContent = next.attack_decoded || ''; $('#attack-decoded-box').hidden = !next.attack_decoded;
+  $('#attack-activity').replaceChildren(Object.assign(document.createElement('span'), {className: 'live-dot'}),
+    document.createTextNode(attacking ? 'PROCESSING' : next.attack_verdict === 'Not attacked' ? 'STANDING BY' : 'COMPLETE'));
+  $('#attack-copy-path').textContent = next.attack_copy ? `Attacked copy saved to ${next.attack_copy}` : '';
+  const attackPreview = [next.attack_source, next.attack_copy, next.attack_preview_version].join('|');
+  if (attackPreview !== lastAttackPreview) { lastAttackPreview = attackPreview; updateAttackPreview(next); }
   const preview = [next.media_kind, next.preview_version, next.protected, next.path].join('|');
   if (preview !== lastPreview) { lastPreview = preview; updatePreview(next); }
   const results = JSON.stringify(next.results);
@@ -140,6 +140,67 @@ $('#attack-select').addEventListener('change', describeAttack);
 
 // Preview panes load media through the session's own endpoints; the page
 // never receives file bytes through the polled state.
+function renderStages(container, rows) {
+  container.replaceChildren();
+  if (!rows.length) {
+    const row = document.createElement('div'); row.className = 'stage-placeholder';
+    row.textContent = 'Verification stages will appear here'; container.append(row);
+  }
+  for (const row of rows) {
+    const line = document.createElement('div'); line.className = 'stage-row ' + (row.tags || []).join(' ');
+    const mark = document.createElement('span'); mark.className = 'stage-mark'; line.append(mark);
+    for (const value of row.values) { const text = document.createElement('span'); text.textContent = value; line.append(text); }
+    container.append(line);
+  }
+}
+
+// Fetch a difference rendering into a pane; returns the counts for the caller's note.
+async function loadDifference(diff, url, textEl, isStale) {
+  diff.classList.add('comparing');
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('no comparison available');
+    if (isStale()) return null;
+    const type = response.headers.get('Content-Type') || '';
+    if (type.startsWith('image/')) {
+      const blob = await response.blob();
+      const img = diff.querySelector('img');
+      const info = {kind: 'image', changed: Number(response.headers.get('X-Changed')), total: Number(response.headers.get('X-Total')),
+        box: (response.headers.get('X-Box') || '').split(',').map(Number), scale: Number(response.headers.get('X-Scale'))};
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = URL.createObjectURL(blob); });
+      URL.revokeObjectURL(img.src); img.hidden = false; diff.querySelector('.pane-empty').hidden = true; diff.classList.remove('comparing');
+      return info;
+    }
+    const counts = await response.json();
+    diff.classList.remove('comparing');
+    textEl.textContent = `${counts.changed.toLocaleString()} of ${counts.total.toLocaleString()} samples changed.`;
+    return {kind: 'audio', ...counts};
+  } catch (error) {
+    diff.classList.remove('comparing');
+    textEl.textContent = `Comparison unavailable: ${error.message}. The two files may differ in size (crop or resize) or be unreadable.`;
+    return null;
+  }
+}
+
+async function updateAttackPreview(next) {
+  const v = next.attack_preview_version, sourceKind = next.attack_source_kind, copyKind = next.attack_copy_kind;
+  showPane($('#pane-attack-source'), sourceKind, next.attack_source && sourceKind ? `preview/attack-source?v=${v}` : null, 'The file you chose');
+  showPane($('#pane-attack-copy'), copyKind, next.attack_copy && copyKind ? `preview/attack-copy?v=${v}` : null, 'The attacked copy');
+  const diff = $('#pane-attack-difference');
+  showPane(diff, null, null, next.attack_copy ? 'Comparing the attacked copy with the file you chose…' : 'Run an attack to see what it changed');
+  $('#attack-compare-note').textContent = '';
+  if (!next.attack_copy || !copyKind) return;
+  const info = await loadDifference(diff, `preview/attack-difference?v=${v}`, $('#attack-difference-text'),
+    () => lastAttackPreview !== [next.attack_source, next.attack_copy, next.attack_preview_version].join('|'));
+  if (!info) return;
+  if (info.kind === 'image') {
+    const where = info.box.length === 4 ? ` The zoom shows rows ${info.box[1].toLocaleString()} to ${info.box[3].toLocaleString()}, columns ${info.box[0].toLocaleString()} to ${info.box[2].toLocaleString()}.` : '';
+    $('#attack-compare-note').textContent = `The attack changed ${info.changed.toLocaleString()} of ${info.total.toLocaleString()} pixels.${where}`;
+  } else {
+    $('#attack-compare-note').textContent = `The attack changed ${info.changed.toLocaleString()} of ${info.total.toLocaleString()} samples.`;
+  }
+}
+
 function showPane(pane, kind, src, emptyText) {
   const img = pane.querySelector('img'), audio = pane.querySelector('audio'), empty = pane.querySelector('.pane-empty');
   const label = empty.querySelector('span');
