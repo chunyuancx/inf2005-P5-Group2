@@ -29,6 +29,16 @@ def test_full_attack_suite_passes_and_writes_evidence(tmp_path):
     assert "docs section 7" in markdown  # the degradation notes travel with the evidence
 
 
+def test_suite_can_run_twice_into_the_same_folder(tmp_path):
+    """Saving never overwrites, so a second run must not collide with the first."""
+    covers = (Path(__file__).resolve().parent.parent / "samples" / "lambda-icon.png",)
+    for _ in range(2):
+        scenarios = build_real_scenarios(tmp_path, covers=covers, modes=("manual",))
+        report = AutomatedTestRunner().run(scenarios, tmp_path / "evidence")
+        assert report["failed"] == 0, [r["error"] for r in report["results"] if not r["passed"]]
+    assert all(case.name.startswith("lambda-icon/") for case in scenarios)
+
+
 def test_degraded_verdicts_are_annotated(tmp_path):
     scenarios = build_real_scenarios(tmp_path, modes=("auto",))
     tampering = [case for case in scenarios if case.attack in {"pixel_edit", "sample_edit", "crop_bottom"}]

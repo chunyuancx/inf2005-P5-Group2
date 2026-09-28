@@ -10,6 +10,7 @@ this is the known degradation described in docs/verification_integration.md
 sections 4 and 7, so the evidence stays honest when Member 4 changes it.
 """
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 from src.attacks import ATTACKS, AttackContext, apply_attack
@@ -60,8 +61,13 @@ class Bench:
         self.message = message
         self.keys = self.work_dir / "keys"
         self.other_keys = self.work_dir / "keys-other"
-        self.files = self.work_dir / "files"
-        self.files.mkdir(parents=True, exist_ok=True)
+        # Saving never overwrites, so each run gets its own files folder.
+        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.files, counter = self.work_dir / f"files-{stamp}", 1
+        while self.files.exists():
+            counter += 1
+            self.files = self.work_dir / f"files-{stamp}-{counter}"
+        self.files.mkdir(parents=True)
         self.counter = 0
 
     def controller(self, mode: str, key_dir: Path | None = None,
@@ -112,6 +118,11 @@ def _expected_for(attack_id: str, cover: Path) -> tuple[tuple[Verdict, Verdict],
     return EXPECTED[attack_id], ""
 
 
+def _prefix(cover: Path, lsb: int, mode: str) -> str:
+    """Scenario name prefix; the cover name keeps runs with several covers apart."""
+    return f"{cover.stem}/{_kind(cover)}/{mode}/lsb{lsb}"
+
+
 def attack_scenarios(bench: Bench, cover: Path, lsb: int, mode: str) -> list[Scenario]:
     kind = _kind(cover)
     media_kind = MediaType.AUDIO if kind == "audio" else MediaType.IMAGE
@@ -134,7 +145,7 @@ def attack_scenarios(bench: Bench, cover: Path, lsb: int, mode: str) -> list[Sce
         return execute
 
     # The clean case must also give back the hidden message it was protected with.
-    cases.append(Scenario(f"{kind}/{mode}/lsb{lsb}/clean", Verdict.AUTHENTIC, run_attack("clean"),
+    cases.append(Scenario(f"{_prefix(cover, lsb, mode)}/clean", Verdict.AUTHENTIC, run_attack("clean"),
                           kind, lsb, mode=mode, attack="none", expected_payload=bench.message))
     for attack in ATTACKS.values():
         if media_kind not in attack.kinds:
@@ -143,7 +154,7 @@ def attack_scenarios(bench: Bench, cover: Path, lsb: int, mode: str) -> list[Sce
         expected = manual_expected if mode == "manual" else auto_expected
         if mode == "auto" and manual_expected != auto_expected:
             note = f"{note} {DEGRADED}".strip()
-        cases.append(Scenario(f"{kind}/{mode}/lsb{lsb}/{attack.id}", expected, run_attack(attack.id),
+        cases.append(Scenario(f"{_prefix(cover, lsb, mode)}/{attack.id}", expected, run_attack(attack.id),
                               kind, lsb, mode=mode, attack=attack.id, note=note))
     return cases
 
@@ -203,7 +214,7 @@ def verifier_scenarios(bench: Bench, cover: Path, lsb: int, clean: bool = True) 
             ("unsupported_format", Verdict.CANNOT_VERIFY, unsupported_format, "manual", "")):
         if name == "unprotected_cover" and not clean:
             continue
-        cases.append(Scenario(f"{kind}/{mode}/lsb{lsb}/verifier/{name}", expected, execute,
+        cases.append(Scenario(f"{_prefix(cover, lsb, mode)}/verifier/{name}", expected, execute,
                               kind, lsb, mode=mode, attack=name, note=note))
     return cases
 

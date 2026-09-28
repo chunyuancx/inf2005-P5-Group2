@@ -611,7 +611,18 @@ class ApplicationWindow:
             if attack.targets_payload:
                 context = AttackContext(lsb=depth, start=self.controller.location.recover(media, depth),
                                         service=self.controller.service_for(media), seed=depth)
-            attacked = apply_attack(attack.id, media, context)
+            try:
+                attacked = apply_attack(attack.id, media, context)
+            except IntegrationError as exc:
+                if not attack.targets_payload:
+                    raise
+                where = (f"manual position {self.attack_manual_start.get().strip() or '?'}"
+                         if self.attack_start_mode.get() == "manual" else "the position derived from your passphrase")
+                raise IntegrationError(
+                    f"{exc} This attack rewrites the hidden payload, so the lab must find it first: "
+                    f"it looked at LSB depth {depth}, {where}. Choose the saved stego copy (not the "
+                    "original or an already attacked copy) and use exactly the depth, mode and "
+                    "passphrase or position it was protected with.") from exc
             source = Path(path)
             # Each source file gets its own folder under "attacks", and every
             # attacked copy is named by the date and time it was made.
