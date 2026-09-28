@@ -56,9 +56,16 @@
           <p class="tiny muted depth-note">Use the same depth to protect and verify.</p>
           <label class="payload-field" for="payload"><span>PAYLOAD TO EMBED</span><textarea id="payload" data-control="payload_box" rows="3" maxlength="4096" spellcheck="false" placeholder="Type the message you want to hide"></textarea></label>
           <p class="tiny muted">This text is signed and embedded in the protected media.</p>
+          <p class="tiny muted lab-label-line">START LOCATION</p>
+          <div class="start-mode" role="group" aria-label="Start location mode"><button id="mode-auto" data-mode="auto" data-control="mode_box" aria-pressed="true">Automatic</button><button id="mode-manual" data-mode="manual" data-control="mode_box" aria-pressed="false">Manual</button></div>
+          <div id="position-block" hidden>
+          <label class="passphrase-field" for="manual-start"><span>POSITION</span><input type="number" id="manual-start" data-control="manual_box" min="1" step="1" placeholder="Enter position here" aria-label="Manual start position"></label>
+          <p class="tiny muted">The unit where the payload starts. Party B needs this same number and depth.</p>
+          </div>
+          <div id="passphrase-block">
           <label class="passphrase-field" for="passphrase"><span>PASSPHRASE</span><input type="password" id="passphrase" data-control="passphrase_box" autocomplete="off" spellcheck="false" placeholder="Enter your secret passphrase"></label>
           <p class="tiny muted" id="passphrase-hint">Decides where the payload hides. Party B needs this same passphrase. It is never stored in the file.</p>
-          <div class="start-mode" role="group" aria-label="Start location mode"><button id="mode-auto" data-mode="auto" data-control="mode_box" aria-pressed="true">Automatic</button><button id="mode-manual" data-mode="manual" data-control="mode_box" aria-pressed="false">Manual</button><input type="number" id="manual-start" data-control="manual_box" min="1" step="1" placeholder="Position" aria-label="Manual start position"></div>
+          </div>
           <p class="tiny muted" id="mode-hint">Automatic derives the position from your passphrase, so it differs for every file.</p>
           <div class="actions"><button class="primary-button" data-action="protect" data-control="protect_button"><svg><use href="#shield"/></svg>Protect file</button></div>
         </div>
@@ -79,9 +86,40 @@
     </main>
 
     <main id="testing" class="board test-board" hidden aria-label="Test studio">
-      <section class="glass demo-card"><header class="card-heading"><span>THE TEST STUDIO</span></header><div class="card-content"><div class="studio-icon"><svg><use href="#flask"/></svg></div><h2>Evidence, beautifully<br>organised.</h2><p class="muted">Explore expected-versus-actual reporting with two canned scenarios.</p><span class="demo-tag">REPORTING DEMO · NO MEDIA PROCESSING</span><button class="primary-button" data-action="run_tests" data-control="test_button">Run reporting demo<svg><use href="#arrow"/></svg></button><p class="tiny muted">This demo does not verify the selected file or run integration tests.</p></div></section>
-      <section class="glass report-card"><header class="card-heading"><span>SCENARIO RESULTS</span></header><div class="card-content"><h2 id="test-summary">No test run yet</h2><div class="report-scroll"><table><thead><tr><th>Scenario</th><th>Expected</th><th>Actual</th><th>Result</th></tr></thead><tbody id="results"></tbody></table><div id="report-empty" class="report-empty"><svg><use href="#flask"/></svg><p>A fresh canvas for your results.</p><small>Run the demo to populate this workspace.</small></div></div></div></section>
-      <section class="glass evidence-card"><header class="card-heading"><span>TEST EVIDENCE</span></header><div class="card-content"><p id="test-output" class="muted">Run the reporting demo to generate a new evidence folder.</p></div></section>
+      <section class="glass demo-card"><header class="card-heading"><span>ATTACK LAB</span></header><div class="card-content">
+        <h2>Break it on purpose.</h2><p class="muted">The lab has its own file and settings. Pick a stego file, enter what it was protected with, choose an attack, or run every attack as the full simulation suite.</p>
+        <button class="file-picker attack-picker" data-action="choose_attack" data-control="attack_browse_button"><span class="file-orb"><svg><use href="#upload"/></svg></span><span class="file-copy"><strong id="attack-filename">Choose a media file</strong><small id="attack-filedetail">PNG, BMP or WAV on this device</small></span><span class="round-arrow"><svg><use href="#arrow"/></svg></span></button>
+        <div class="depth-heading lab-depth"><span class="lab-label">LSB DEPTH</span><span class="depth-value"><b id="attack-depth-value">1</b><small>BIT LSB</small></span></div>
+        <div class="depth-selector" role="group" aria-label="Attack lab LSB depth"><button data-attack-depth="1" aria-pressed="true">1</button><button data-attack-depth="2" aria-pressed="false">2</button><button data-attack-depth="3" aria-pressed="false">3</button><button data-attack-depth="4" aria-pressed="false">4</button><button data-attack-depth="5" aria-pressed="false">5</button><button data-attack-depth="6" aria-pressed="false">6</button><button data-attack-depth="7" aria-pressed="false">7</button><button data-attack-depth="8" aria-pressed="false">8</button></div>
+        <p class="tiny muted lab-label-line">START LOCATION</p>
+        <div class="start-mode" role="group" aria-label="Attack lab start location mode"><button data-attack-mode="auto" data-control="attack_mode_box" aria-pressed="true">Automatic</button><button data-attack-mode="manual" data-control="attack_mode_box" aria-pressed="false">Manual</button></div>
+        <div id="attack-position-block" class="lab-settings" hidden>
+          <label class="lab-field grow" for="attack-manual-start"><span>POSITION</span><input type="number" id="attack-manual-start" data-control="attack_manual_box" min="1" step="1" placeholder="Enter position here" aria-label="Attack lab manual start position"></label>
+        </div>
+        <div class="lab-settings">
+          <label class="lab-field grow" for="attack-passphrase"><span>PASSPHRASE</span><input type="password" id="attack-passphrase" data-control="attack_passphrase_box" autocomplete="off" spellcheck="false" placeholder="Passphrase the file was protected with"></label>
+        </div>
+        <label class="payload-field" for="attack-message"><span>HIDDEN MESSAGE FOR THE SUITE</span><textarea id="attack-message" data-control="attack_message_box" rows="2" maxlength="4096" spellcheck="false" placeholder="Embedded in every cover the suite protects (optional)"></textarea></label>
+        <label class="attack-field" for="attack-select"><span>ATTACK</span><select id="attack-select" data-control="attack_box"><option value="__suite__">Every attack (full simulation suite)</option></select></label>
+        <p class="tiny muted" id="attack-description"></p>
+        <button class="primary-button" data-action="attack" data-control="attack_button"><svg><use href="#flask"/></svg>Run attack simulation</button>
+        <p class="tiny muted attack-output" id="attack-output"></p>
+        <p class="tiny muted suite-output" id="test-output"></p>
+      </div></section>
+      <section class="glass attack-result-card"><header class="card-heading"><span>ATTACK RESULT</span><span class="status-pill" id="attack-activity"><span class="live-dot"></span>STANDING BY</span></header><div class="card-content">
+        <div class="result-heading"><div><h2 class="verdict" id="attack-verdict">Not attacked<span class="muted"> yet.</span></h2><p id="attack-result" class="muted">Run an attack to see how Party B's verification reacts to it.</p></div></div>
+        <div class="decoded-payload" id="attack-decoded-box" hidden><span>DECODED PAYLOAD</span><p id="attack-decoded"></p></div>
+        <div class="stage-list" id="attack-statuses"><div class="stage-placeholder"><span class="stage-dot"></span><span>Verification stages will appear here</span></div></div>
+        <div class="preview-layout attack-compare">
+          <div class="preview-pane" id="pane-attack-source"><span class="pane-label">BEFORE</span><img alt="File before the attack" hidden><audio controls hidden></audio><div class="pane-empty"><svg aria-hidden="true"><use href="#image"/></svg><span class="tiny muted">The file you chose</span></div></div>
+          <div class="preview-pane protected-pane" id="pane-attack-copy"><span class="pane-label">AFTER THE ATTACK</span><img alt="Attacked copy" hidden><audio controls hidden></audio><div class="pane-empty"><svg aria-hidden="true"><use href="#flask"/></svg><span class="tiny muted">The attacked copy</span></div></div>
+          <div class="preview-pane difference-pane" id="pane-attack-difference"><span class="pane-label">WHAT CHANGED, ZOOMED</span><img alt="Changed pixels highlighted" hidden><div class="pane-empty"><svg aria-hidden="true"><use href="#check"/></svg><span class="tiny muted" id="attack-difference-text">Run an attack to see what it changed</span></div></div>
+        </div>
+        <p class="tiny muted" id="attack-compare-note"></p>
+        <p class="tiny muted" id="attack-copy-path"></p>
+      </div></section>
+      <section class="glass report-card failed-card"><header class="card-heading"><span>FAILED SCENARIOS</span><span class="count-pill" id="failed-count">0</span></header><div class="card-content"><div class="report-head"><div><h2 id="test-summary">No test run yet</h2><p class="tiny muted" id="report-legend">A scenario fails when its verdict differs from the one expected, or the run raised an error.</p></div><input type="search" id="results-filter" placeholder="Search scenarios, verdicts, notes" aria-label="Filter scenario results" autocomplete="off"></div><div class="report-scroll"><table><thead><tr><th>Scenario</th><th>Expected</th><th>Actual</th><th>Note</th></tr></thead><tbody id="results-failed"></tbody></table><div id="failed-empty" class="report-empty"><svg><use href="#flask"/></svg><p>No failed scenarios.</p><small>Run the attack suite to populate this workspace.</small></div></div></div></section>
+      <section class="glass report-card passed-card"><header class="card-heading"><span>PASSED SCENARIOS</span><span class="count-pill" id="passed-count">0</span></header><div class="card-content"><p class="tiny muted">The verdict matched the one expected, whatever the verdict was.</p><div class="report-scroll"><table><thead><tr><th>Scenario</th><th>Expected</th><th>Actual</th><th>Note</th></tr></thead><tbody id="results-passed"></tbody></table><div id="passed-empty" class="report-empty"><svg><use href="#check"/></svg><p>No passed scenarios yet.</p><small>Run the attack suite to populate this workspace.</small></div></div></div></section>
     </main>
     <div class="toast" id="toast" role="alert" hidden></div>
   </div>

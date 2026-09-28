@@ -2,7 +2,9 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 let state = null, requestPending = false, lastRows = '', lastResults = '', closing = false;
-let toastTimer, lastPreview = '', manualDirty = false, payloadDirty = false;
+let toastTimer, lastPreview = '', manualDirty = false, lastAttacks = '', payloadDirty = false;
+let lastAttackRows = '', lastAttackPreview = '';
+const labDirty = {manual: false, message: false};
 
 function notify(message) {
   $('#toast').textContent = message;
@@ -36,7 +38,8 @@ function render(next) {
   // The session holds a passphrase the page never receives; say so after a refresh.
   const manual = next.start_mode === 'manual';
   for (const button of $$('[data-mode]')) button.setAttribute('aria-pressed', String(button.dataset.mode === next.start_mode));
-  $('#manual-start').hidden = !manual;
+  $('#position-block').hidden = !manual;   // the position only matters in Manual mode
+  $('#passphrase-block').hidden = manual;   // the passphrase only matters in Automatic mode
   // Never overwrite a position the user has typed but not yet sent: a click on
   // Protect blurs the box, and the next render would otherwise erase it.
   if (!manualDirty && document.activeElement !== $('#manual-start')) $('#manual-start').value = next.manual_start;
@@ -49,38 +52,157 @@ function render(next) {
   if (!payloadDirty && document.activeElement !== $('#payload')) $('#payload').value = next.payload || '';
   $('#test-summary').textContent = next.test_summary;
   $('#test-output').textContent = next.test_output;
-  const rows = JSON.stringify(next.statuses);
-  if (rows !== lastRows) {
-    lastRows = rows;
-    $('#statuses').replaceChildren();
-    if (!next.statuses.length) {
-      const row = document.createElement('div'); row.className = 'stage-placeholder';
-      row.textContent = 'Verification stages will appear here'; $('#statuses').append(row);
-    }
-    for (const row of next.statuses) {
-      const line = document.createElement('div'); line.className = 'stage-row ' + (row.tags || []).join(' ');
-      const mark = document.createElement('span'); mark.className = 'stage-mark'; line.append(mark);
-      for (const value of row.values) { const text = document.createElement('span'); text.textContent = value; line.append(text); }
-      $('#statuses').append(line);
-    }
+  $('#attack-output').textContent = next.attack_output; $('#attack-output').hidden = !next.attack_output;
+  $('#test-output').hidden = !next.test_output;
+  const labFile = (next.attack_path || '').split(/[\\/]/).pop();
+  $('#attack-filename').textContent = labFile || 'Choose a media file';
+  $('#attack-filename').title = next.attack_path || '';
+  $('#attack-filedetail').textContent = labFile ? 'Selected for the attack lab' : 'PNG, BMP or WAV on this device';
+  $('#attack-depth-value').textContent = next.attack_lsb;
+  for (const button of $$('[data-attack-depth]')) {
+    button.disabled = requestPending || next.busy;
+    button.setAttribute('aria-pressed', String(button.dataset.attackDepth === next.attack_lsb));
   }
+  const labManual = next.attack_start_mode === 'manual';
+  for (const button of $$('[data-attack-mode]')) button.setAttribute('aria-pressed', String(button.dataset.attackMode === next.attack_start_mode));
+  $('#attack-position-block').hidden = !labManual;
+  $('#attack-passphrase').closest('.lab-settings').hidden = labManual;
+  if (!labDirty.manual && document.activeElement !== $('#attack-manual-start')) $('#attack-manual-start').value = next.attack_manual_start;
+  if (!labDirty.message && document.activeElement !== $('#attack-message')) $('#attack-message').value = next.attack_message || '';
+  $('#attack-passphrase').placeholder = next.attack_passphrase_set && !$('#attack-passphrase').value ? 'Passphrase held for this session; re-enter to change' : 'Passphrase the file was protected with';
+  const attacks = JSON.stringify(next.attacks);
+  if (attacks !== lastAttacks) {
+    lastAttacks = attacks;
+    const select = $('#attack-select'), current = select.value;
+    select.replaceChildren(Object.assign(document.createElement('option'), {value: SUITE, textContent: 'Every attack (full simulation suite)'}),
+      ...next.attacks.map(a => Object.assign(document.createElement('option'), {value: a.id, textContent: a.label})));
+    select.value = next.attacks.some(a => a.id === current) ? current : SUITE;
+    describeAttack();
+  }
+  const rows = JSON.stringify(next.statuses);
+  if (rows !== lastRows) { lastRows = rows; renderStages($('#statuses'), next.statuses); }
+  const attackRows = JSON.stringify(next.attack_statuses || []);
+  if (attackRows !== lastAttackRows) { lastAttackRows = attackRows; renderStages($('#attack-statuses'), next.attack_statuses || []); }
+  // Attack result card.
+  const attacking = next.attack_verdict === 'Attacking…' || next.attack_verdict === 'Verifying…';
+  $('#attack-verdict').textContent = next.attack_verdict === 'Not attacked' ? 'Not attacked yet.' : next.attack_verdict;
+  $('#attack-result').textContent = next.attack_result || "Run an attack to see how Party B's verification reacts to it.";
+  $('#attack-decoded').textContent = next.attack_decoded || ''; $('#attack-decoded-box').hidden = !next.attack_decoded;
+  $('#attack-activity').replaceChildren(Object.assign(document.createElement('span'), {className: 'live-dot'}),
+    document.createTextNode(attacking ? 'PROCESSING' : next.attack_verdict === 'Not attacked' ? 'STANDING BY' : 'COMPLETE'));
+  $('#attack-copy-path').textContent = next.attack_copy ? `Attacked copy saved to ${next.attack_copy}` : '';
+  const attackPreview = [next.attack_source, next.attack_copy, next.attack_preview_version].join('|');
+  if (attackPreview !== lastAttackPreview) { lastAttackPreview = attackPreview; updateAttackPreview(next); }
   const preview = [next.media_kind, next.preview_version, next.protected, next.path].join('|');
   if (preview !== lastPreview) { lastPreview = preview; updatePreview(next); }
   const results = JSON.stringify(next.results);
   if (results !== lastResults) {
     lastResults = results;
-    $('#results').replaceChildren();
-    $('#report-empty').hidden = next.results.length > 0;
+    $('#results-failed').replaceChildren(); $('#results-passed').replaceChildren();
     for (const row of next.results) {
-      const tr = document.createElement('tr'); tr.className = row.tags.includes('pass') ? 'pass' : 'fail';
-      for (const value of row.values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
-      $('#results').append(tr);
+      const passed = row.tags.includes('pass');
+      const tr = document.createElement('tr'); tr.className = passed ? 'pass' : 'fail';
+      // values: name, expected, actual, result, note. The result is implied by the box.
+      for (const value of [row.values[0], row.values[1], row.values[2], row.values[4] || '']) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
+      $(passed ? '#results-passed' : '#results-failed').append(tr);
     }
+    filterResults();
   }
 }
 
+// Client-side filter over the rendered scenario rows; the state is untouched.
+function filterResults() {
+  const query = $('#results-filter').value.trim().toLowerCase();
+  let shown = 0, total = 0;
+  for (const [body, empty, count] of [['#results-failed', '#failed-empty', '#failed-count'], ['#results-passed', '#passed-empty', '#passed-count']]) {
+    const rows = $$(body + ' tr');
+    let visible = 0;
+    for (const tr of rows) { const hit = !query || tr.textContent.toLowerCase().includes(query); tr.hidden = !hit; visible += hit; }
+    $(empty).hidden = rows.length > 0 && (!query || visible > 0);
+    $(empty + ' p').textContent = rows.length && query ? 'No matching scenarios.' : body.includes('failed') ? 'No failed scenarios.' : 'No passed scenarios yet.';
+    $(count).textContent = query ? `${visible} / ${rows.length}` : String(rows.length);
+    shown += visible; total += rows.length;
+  }
+  $('#report-legend').textContent = total && query
+    ? `${shown} of ${total} scenarios match "${query}".`
+    : 'A scenario fails when its verdict differs from the one expected, or the run raised an error.';
+}
+$('#results-filter').addEventListener('input', filterResults);
+
+const SUITE = '__suite__';
+function describeAttack() {
+  const value = $('#attack-select').value;
+  const chosen = (state?.attacks || []).find(a => a.id === value);
+  $('#attack-description').textContent = value === SUITE
+    ? 'Protects the bundled samples and your file, runs every attack and verifier case in both start modes, and writes JSON, log and Markdown evidence to a folder you choose.'
+    : chosen ? chosen.description + (chosen.targets_payload ? ' Needs the same depth and start location as the protected file.' : '')
+    : 'Choose a file to see the attacks for its type.';
+}
+$('#attack-select').addEventListener('change', describeAttack);
+
 // Preview panes load media through the session's own endpoints; the page
 // never receives file bytes through the polled state.
+function renderStages(container, rows) {
+  container.replaceChildren();
+  if (!rows.length) {
+    const row = document.createElement('div'); row.className = 'stage-placeholder';
+    row.textContent = 'Verification stages will appear here'; container.append(row);
+  }
+  for (const row of rows) {
+    const line = document.createElement('div'); line.className = 'stage-row ' + (row.tags || []).join(' ');
+    const mark = document.createElement('span'); mark.className = 'stage-mark'; line.append(mark);
+    for (const value of row.values) { const text = document.createElement('span'); text.textContent = value; line.append(text); }
+    container.append(line);
+  }
+}
+
+// Fetch a difference rendering into a pane; returns the counts for the caller's note.
+async function loadDifference(diff, url, textEl, isStale) {
+  diff.classList.add('comparing');
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('no comparison available');
+    if (isStale()) return null;
+    const type = response.headers.get('Content-Type') || '';
+    if (type.startsWith('image/')) {
+      const blob = await response.blob();
+      const img = diff.querySelector('img');
+      const info = {kind: 'image', changed: Number(response.headers.get('X-Changed')), total: Number(response.headers.get('X-Total')),
+        box: (response.headers.get('X-Box') || '').split(',').map(Number), scale: Number(response.headers.get('X-Scale'))};
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = URL.createObjectURL(blob); });
+      URL.revokeObjectURL(img.src); img.hidden = false; diff.querySelector('.pane-empty').hidden = true; diff.classList.remove('comparing');
+      return info;
+    }
+    const counts = await response.json();
+    diff.classList.remove('comparing');
+    textEl.textContent = `${counts.changed.toLocaleString()} of ${counts.total.toLocaleString()} samples changed.`;
+    return {kind: 'audio', ...counts};
+  } catch (error) {
+    diff.classList.remove('comparing');
+    textEl.textContent = `Comparison unavailable: ${error.message}. The two files may differ in size (crop or resize) or be unreadable.`;
+    return null;
+  }
+}
+
+async function updateAttackPreview(next) {
+  const v = next.attack_preview_version, sourceKind = next.attack_source_kind, copyKind = next.attack_copy_kind;
+  showPane($('#pane-attack-source'), sourceKind, next.attack_source && sourceKind ? `preview/attack-source?v=${v}` : null, 'The file you chose');
+  showPane($('#pane-attack-copy'), copyKind, next.attack_copy && copyKind ? `preview/attack-copy?v=${v}` : null, 'The attacked copy');
+  const diff = $('#pane-attack-difference');
+  showPane(diff, null, null, next.attack_copy ? 'Comparing the attacked copy with the file you chose…' : 'Run an attack to see what it changed');
+  $('#attack-compare-note').textContent = '';
+  if (!next.attack_copy || !copyKind) return;
+  const info = await loadDifference(diff, `preview/attack-difference?v=${v}`, $('#attack-difference-text'),
+    () => lastAttackPreview !== [next.attack_source, next.attack_copy, next.attack_preview_version].join('|'));
+  if (!info) return;
+  if (info.kind === 'image') {
+    const where = info.box.length === 4 ? ` The zoom shows rows ${info.box[1].toLocaleString()} to ${info.box[3].toLocaleString()}, columns ${info.box[0].toLocaleString()} to ${info.box[2].toLocaleString()}.` : '';
+    $('#attack-compare-note').textContent = `The attack changed ${info.changed.toLocaleString()} of ${info.total.toLocaleString()} pixels.${where}`;
+  } else {
+    $('#attack-compare-note').textContent = `The attack changed ${info.changed.toLocaleString()} of ${info.total.toLocaleString()} samples.`;
+  }
+}
+
 function showPane(pane, kind, src, emptyText) {
   const img = pane.querySelector('img'), audio = pane.querySelector('audio'), empty = pane.querySelector('.pane-empty');
   const label = empty.querySelector('span');
@@ -167,6 +289,10 @@ async function poll() {
 // Protect and verify both need the passphrase the user typed. Send it first so
 // the value never has to be polled back into the page.
 const NEEDS_PASSPHRASE = new Set(['protect', 'verify']);
+$('#attack-manual-start').addEventListener('input', () => { labDirty.manual = true; });
+$('#attack-message').addEventListener('input', () => { labDirty.message = true; });
+$$('[data-attack-depth]').forEach(button => button.addEventListener('click', () => action('attack_lsb', button.dataset.attackDepth)));
+$$('[data-attack-mode]').forEach(button => button.addEventListener('click', () => action('attack_start_mode', button.dataset.attackMode)));
 const NEEDS_PAYLOAD = new Set(['protect']);
 $('#manual-start').addEventListener('input', () => { manualDirty = true; });
 $('#payload').addEventListener('input', () => { payloadDirty = true; });
@@ -179,8 +305,17 @@ $$('[data-action]').forEach(button => button.addEventListener('click', async () 
     await action('manual_start', manualStart);
     manualDirty = false;
   }
-  if (NEEDS_PAYLOAD.has(name)) await action('payload', $('#payload').value);
-  await action(name);
+  if (NEEDS_PAYLOAD.has(name)) { await action('payload', $('#payload').value); payloadDirty = false; }
+  if (name === 'attack') {
+    // The lab's own settings travel first, read before any request re-renders the page.
+    const passphrase = $('#attack-passphrase').value, manualStart = $('#attack-manual-start').value, message = $('#attack-message').value;
+    await action('attack_passphrase', passphrase);
+    await action('attack_manual_start', manualStart);
+    await action('attack_message', message);
+    labDirty.manual = labDirty.message = false;
+    if ($('#attack-select').value === SUITE) { await action('run_tests'); return; }
+  }
+  await action(name, name === 'attack' ? $('#attack-select').value : undefined);
 }));
 $$('[data-depth]').forEach(button => button.addEventListener('click', () => action('depth', button.dataset.depth)));
 $$('[data-mode]').forEach(button => button.addEventListener('click', () => action('start_mode', button.dataset.mode)));
