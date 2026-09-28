@@ -281,27 +281,49 @@ def make_server(desktop):
 WINDOW_TITLE = "Media Integrity | Glass workspace"
 
 
-def _maximize_when_visible(title: str, timeout: float = 15.0) -> bool:
-    """Maximise and raise the first visible top-level window with this title (Windows only)."""
+def _windows_titled(title: str) -> list:
+    """Handles of visible top-level windows with exactly this title (Windows only)."""
     if os.name != "nt":
-        return False
+        return []
     import ctypes
     from ctypes import wintypes
 
     user32 = ctypes.windll.user32
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    found = []
+
+    def collect(hwnd, _):
+        if user32.IsWindowVisible(hwnd):
+            buffer = ctypes.create_unicode_buffer(256)
+            user32.GetWindowTextW(hwnd, buffer, 256)
+            if buffer.value == title:
+                found.append(hwnd)
+        return True
+    user32.EnumWindows(callback_type(collect), 0)
+    return found
+
+
+def _close_stale_windows(title: str) -> int:
+    """Close app windows left over from earlier sessions, which can only show
+    'Session disconnected' and would otherwise sit in front of the new one."""
+    if os.name != "nt":
+        return 0
+    import ctypes
+    stale = _windows_titled(title)
+    for hwnd in stale:
+        ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+    return len(stale)
+
+
+def _maximize_when_visible(title: str, ignore=(), timeout: float = 15.0) -> bool:
+    """Maximise and raise the first new window with this title (Windows only)."""
+    if os.name != "nt":
+        return False
+    import ctypes
+    user32 = ctypes.windll.user32
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        found = []
-
-        def collect(hwnd, _):
-            if user32.IsWindowVisible(hwnd):
-                buffer = ctypes.create_unicode_buffer(256)
-                user32.GetWindowTextW(hwnd, buffer, 256)
-                if buffer.value == title:
-                    found.append(hwnd)
-            return True
-        user32.EnumWindows(callback_type(collect), 0)
+        found = [hwnd for hwnd in _windows_titled(title) if hwnd not in ignore]
         if found:
             user32.ShowWindow(found[0], 3)  # SW_MAXIMIZE
             user32.SetForegroundWindow(found[0])
@@ -322,8 +344,10 @@ def launch(root, controller, *, open_window=True):
         if browser:
             # Edge/Chrome app windows restore their last bounds and can ignore
             # --start-maximized, so the window is also maximised once it appears.
+            stale = tuple(_windows_titled(WINDOW_TITLE))
+            _close_stale_windows(WINDOW_TITLE)
             subprocess.Popen([str(browser), f"--app={url}", "--start-maximized"])
-            Thread(target=_maximize_when_visible, args=(WINDOW_TITLE,), daemon=True).start()
+            Thread(target=_maximize_when_visible, args=(WINDOW_TITLE, stale), daemon=True).start()
         else:
             webbrowser.open(url)
     try:

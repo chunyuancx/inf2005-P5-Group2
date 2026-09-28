@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -526,11 +527,19 @@ class ApplicationWindow:
                                         service=self.controller.service_for(media), seed=depth)
             attacked = apply_attack(attack.id, media, context)
             source = Path(path)
-            target = source.with_name(f"{source.stem}_{attack.id}{attacked.suffix}")
+            # Each source file gets its own folder under "attacks", and every
+            # attacked copy is named by the date and time it was made.
+            if source.parent.parent.name == "attacks":
+                folder = source.parent  # attacking an attacked copy: stay in its folder
+            else:
+                folder = source.parent / "attacks" / source.stem
+            folder.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            target = folder / f"{stamp}_{attack.id}{attacked.suffix}"
             counter = 1
             while target.exists():
                 counter += 1
-                target = source.with_name(f"{source.stem}_{attack.id}-{counter}{attacked.suffix}")
+                target = folder / f"{stamp}_{attack.id}-{counter}{attacked.suffix}"
             self.controller.save(attacked, str(target))
             return target
 

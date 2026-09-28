@@ -48,13 +48,16 @@ show on the next refresh.
 
 ### Test studio view
 
-- **Attack lab.** Pick an attack for the selected file's type and click Attack.
-  The attacked copy is saved next to the source as `<name>_<attack>.<ext>`
+- **Attack lab.** Choose a file, pick an attack for its type, and click Run
+  attack simulation. The attacked copy is saved as
+  `attacks/<file name>/<date>_<time>_<attack>.<ext>` next to the source
   (never overwriting), selected, and verified immediately; the verdict is
   shown in the lab and in the workspace card.
-- **Automated attack suite.** Runs the full scenario suite (section 4) on the
-  bundled samples plus the selected file, into an evidence folder you choose.
-  Results fill the table with a note column for known degradations.
+- **Full simulation suite.** The first entry in the attack list runs the
+  whole scenario suite (section 4) on the bundled samples plus the selected
+  file. Each run writes its evidence to `run-<date>_<time>` inside the folder
+  you choose. Failed scenarios are listed first, passed ones below, with a
+  shared search box and a note column for known degradations.
 
 ## 3. Attack simulation (`src/attacks/`)
 

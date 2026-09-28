@@ -10,7 +10,6 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from tempfile import mkdtemp
 from typing import Callable
 
 from src.models import Verdict, VerificationResult
@@ -51,7 +50,13 @@ class AutomatedTestRunner:
                   "results": rows}
         parent = Path(output_dir)
         parent.mkdir(parents=True, exist_ok=True)
-        folder = Path(mkdtemp(prefix="run-", dir=parent))
+        # One folder per run, named by the date and time it was made.
+        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        folder, counter = parent / f"run-{stamp}", 1
+        while folder.exists():
+            counter += 1
+            folder = parent / f"run-{stamp}-{counter}"
+        folder.mkdir()
         report["evidence_dir"] = str(folder)
         (folder / "results.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
         lines = ["Expected vs actual verification evidence (mode recorded per case)"]
