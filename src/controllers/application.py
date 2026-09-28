@@ -41,14 +41,15 @@ class ApplicationController:
             return self.audio
         raise UnsupportedFileType("Unsupported media type.")
 
-    def protect(self, path: str, lsb: int) -> Media:
+    def protect(self, path: str, lsb: int, payload: str = "") -> Media:
         self.validate_lsb(lsb)
         media = self.load(path)
         service = self.service_for(media)
         try:
             start = self.location.generate(media, lsb)
             digest = self.crypto.hash_media(media, lsb)
-            content = self.payload.create(media, digest)
+            content = (self.payload.create(media, digest, payload) if payload
+                       else self.payload.create(media, digest))
             encoded = self.payload.pack(content, self.crypto.sign(content))
             if len(encoded) > service.capacity(media, lsb, start):
                 raise IntegrationError("Payload exceeds the available media capacity.")

@@ -38,3 +38,4 @@ class VerificationResult:
     verdict: Verdict
     message: str
     statuses: Mapping[str, str] = field(default_factory=dict)
+    decoded_payload: str | None = None

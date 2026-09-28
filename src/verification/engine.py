@@ -1,4 +1,5 @@
 import hmac
+import json
 import logging
 
 from src.exceptions import IntegrationError, PayloadMissing, WrongStartLocation
@@ -49,7 +50,12 @@ class VerificationEngine:
                 statuses[stage] = "Mismatch"
                 return VerificationResult(Verdict.TAMPERED, "Canonical media digest does not match.", statuses)
             statuses[stage] = "Match"
-            return VerificationResult(Verdict.AUTHENTIC, "Signature and canonical media digest verified.", statuses)
+            try:
+                decoded_payload = json.loads(payload.signed_data).get("metadata", {}).get("payload", "")
+            except (ValueError, TypeError, AttributeError):
+                decoded_payload = ""
+            return VerificationResult(Verdict.AUTHENTIC, "Signature and canonical media digest verified.",
+                                      statuses, decoded_payload if isinstance(decoded_payload, str) else "")
         except WrongStartLocation as exc:
             statuses[stage] = "Failed"
             return VerificationResult(Verdict.WRONG_START_LOCATION, str(exc), statuses)

@@ -2,7 +2,7 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 let state = null, requestPending = false, lastRows = '', lastResults = '', closing = false;
-let toastTimer, lastPreview = '', manualDirty = false, lastAttacks = '';
+let toastTimer, lastPreview = '', manualDirty = false, lastAttacks = '', payloadDirty = false;
 
 function notify(message) {
   $('#toast').textContent = message;
@@ -25,6 +25,7 @@ function render(next) {
     button.setAttribute('aria-pressed', String(button.dataset.depth === next.lsb));
   }
   $('#output').textContent = next.output;
+  $('#decoded-payload').textContent = next.decoded_payload || 'No decoded payload yet.';
   $('#verdict').textContent = next.verdict === 'Not verified' ? 'Not verified yet.' : next.verdict;
   $('#activity').replaceChildren(Object.assign(document.createElement('span'), {className: 'live-dot'}),
     document.createTextNode(next.busy ? 'PROCESSING' : next.verdict === 'Not verified' ? 'STANDING BY' : 'COMPLETE'));
@@ -45,6 +46,7 @@ function render(next) {
   $('#passphrase-hint').textContent = next.passphrase_set && !$('#passphrase').value
     ? 'This session already holds a passphrase. Re-enter it to protect or verify.'
     : 'Decides where the payload hides. Party B needs this same passphrase. It is never stored in the file.';
+  if (!payloadDirty && document.activeElement !== $('#payload')) $('#payload').value = next.payload || '';
   $('#test-summary').textContent = next.test_summary;
   $('#test-output').textContent = next.test_output;
   $('#attack-output').textContent = next.attack_output; $('#attack-output').hidden = !next.attack_output;
@@ -211,7 +213,9 @@ async function poll() {
 // Protect and verify both need the passphrase the user typed. Send it first so
 // the value never has to be polled back into the page.
 const NEEDS_PASSPHRASE = new Set(['protect', 'verify', 'attack']);
+const NEEDS_PAYLOAD = new Set(['protect']);
 $('#manual-start').addEventListener('input', () => { manualDirty = true; });
+$('#payload').addEventListener('input', () => { payloadDirty = true; });
 $$('[data-action]').forEach(button => button.addEventListener('click', async () => {
   const name = button.dataset.action;
   if (NEEDS_PASSPHRASE.has(name)) {
@@ -221,6 +225,7 @@ $$('[data-action]').forEach(button => button.addEventListener('click', async () 
     await action('manual_start', manualStart);
     manualDirty = false;
   }
+  if (NEEDS_PAYLOAD.has(name)) { await action('payload', $('#payload').value); payloadDirty = false; }
   if (name === 'attack' && $('#attack-select').value === SUITE) { await action('run_tests'); return; }
   await action(name, name === 'attack' ? $('#attack-select').value : undefined);
 }));
