@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 from src.controllers import ApplicationController
 from src.gui.desktop import GlassDesktop, make_server
+from src.testing.demo_scenarios import build_demo_scenarios
 from tests.fakes import FakeCrypto, FakePayloadService, FakeSteganography, SelfCheckingStartLocation
 
 
@@ -53,7 +54,7 @@ def main():
     service = FakeSteganography()
     controller = Controller(service, service, FakeCrypto(), FakePayloadService(), SelfCheckingStartLocation())
     root = tk.Tk()
-    desktop = GlassDesktop(root, controller)
+    desktop = GlassDesktop(root, controller, scenarios=lambda folder: build_demo_scenarios())
     server, url = make_server(desktop)
     Thread(target=server.serve_forever, daemon=True).start()
     (folder / "ready.json").write_text(json.dumps({"url": url}), encoding="utf-8")

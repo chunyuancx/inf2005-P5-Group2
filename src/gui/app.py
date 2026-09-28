@@ -1,27 +1,48 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from src.controllers import ApplicationController
+from src.attacks import ATTACKS, AttackContext, apply_attack, attacks_for
 from src.exceptions import IntegrationError
-from src.models import Verdict
-from src.testing.demo_scenarios import build_demo_scenarios
+from src.models import MediaType, Verdict
 from src.testing.runner import AutomatedTestRunner
+from src.testing.scenarios import DEFAULT_COVERS, MESSAGE, build_real_scenarios
 from src.gui.theme import ACCENT, BACKDROP, INSET, MUTED, PANEL, TEXT, CosmicHeader, GlassCard
 
 
 class ApplicationWindow:
     # Class-level defaults so partially constructed windows (tests) still work.
     preview_version = 0      # bumped whenever the preview panes must reload
+    attack_preview_version = 0  # same, for the attack result's before/after panes
     verified_protected = False  # the protected copy passed its self-check; saving allowed
+    scenarios = None         # callable(folder) -> scenarios for the test studio; real suite by default
     _progress = None         # (stages, current index) while verification runs
     _progress_dirty = False  # set from the worker thread, drained by the poll loop
 
-    def _initialize_state(self, root, controller, runner=None):
+    def _initialize_state(self, root, controller, runner=None, scenarios=None):
         """Shared workflow state for the native and glass desktop views."""
         self.root, self.controller = root, controller
         self.runner = runner or AutomatedTestRunner()
+        self.scenarios = scenarios
+        self.attack_choice = tk.StringVar()
+        self.attack_output = tk.StringVar()
+        # The test studio works on its own file with its own settings, so the
+        # workspace selection and the attack lab never interfere.
+        self.attack_path = tk.StringVar()
+        self.attack_lsb = tk.StringVar(value="1")
+        self.attack_passphrase = tk.StringVar()
+        self.attack_start_mode = tk.StringVar(value="auto")
+        self.attack_manual_start = tk.StringVar()
+        self.attack_message = tk.StringVar()
+        # Result of the last single attack, shown in the Attack result card.
+        self.attack_verdict = tk.StringVar(value="Not attacked")
+        self.attack_result = tk.StringVar()
+        self.attack_decoded = tk.StringVar()
+        self.attack_source = tk.StringVar()
+        self.attack_copy = tk.StringVar()
         self.protected = None
         self.busy = False
         self._drag_offset = None
@@ -37,12 +58,12 @@ class ApplicationWindow:
         self.output = tk.StringVar(value="Choose an original or stego file to begin.")
         self.decoded_payload = tk.StringVar(value="No decoded payload yet.")
         self.verdict = tk.StringVar(value="Not verified")
-        self.test_output = tk.StringVar(value="Run the reporting demo to generate a new evidence folder.")
+        self.test_output = tk.StringVar()
         self.test_summary = tk.StringVar(value="No test run yet")
 
     def __init__(self, root: tk.Tk, controller: ApplicationController,
-                 runner: AutomatedTestRunner | None = None):
-        self._initialize_state(root, controller, runner)
+                 runner: AutomatedTestRunner | None = None, scenarios=None):
+        self._initialize_state(root, controller, runner, scenarios)
         root.title("Media Integrity | Protect & Verify")
         root.geometry("1140x940")
         root.minsize(940, 860)
@@ -166,15 +187,55 @@ class ApplicationWindow:
         self.statuses_table = self._table(result, (("stage", "Verification stage", 240), ("status", "Status", 540)), height=4)
 
     def _build_testing(self, parent):
-        ttk.Label(parent, text="Automated test runner", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(parent, text="REPORTING DEMO  /  Canned results  /  No media processing", style="Muted.TLabel").pack(anchor="w", pady=(6, 12))
-        ttk.Label(parent, text="Demonstrate expected-versus-actual reporting using two canned results.\nThis does not run integration tests or verify the selected file.", justify="left").pack(anchor="w", pady=(0, 14))
+        ttk.Label(parent, text="Attack lab", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(parent, text="Apply an attack to the selected stego file. The attacked copy is saved next to it and verified.",
+                  style="Muted.TLabel").pack(anchor="w", pady=(6, 10))
+        pick = ttk.Frame(parent)
+        pick.pack(fill="x", pady=(0, 6))
+        self.attack_browse_button = ttk.Button(pick, text="Choose file…", command=self.choose_attack)
+        self.attack_browse_button.pack(side="left")
+        ttk.Label(pick, textvariable=self.attack_path, style="Muted.TLabel").pack(side="left", padx=10)
+        settings = ttk.Frame(parent)
+        settings.pack(fill="x", pady=(0, 6))
+        ttk.Label(settings, text="LSB", style="Heading.TLabel").pack(side="left", padx=(0, 6))
+        self.attack_lsb_box = ttk.Combobox(settings, textvariable=self.attack_lsb, values=list(range(1, 9)), state="readonly", width=3)
+        self.attack_lsb_box.pack(side="left")
+        ttk.Label(settings, text="Passphrase", style="Heading.TLabel").pack(side="left", padx=(12, 6))
+        self.attack_passphrase_box = ttk.Entry(settings, textvariable=self.attack_passphrase, show="•", width=22)
+        self.attack_passphrase_box.pack(side="left")
+        self.attack_mode_box = ttk.Checkbutton(settings, text="Manual start", variable=self.attack_start_mode,
+                                               onvalue="manual", offvalue="auto")
+        self.attack_mode_box.pack(side="left", padx=(12, 6))
+        self.attack_manual_box = ttk.Entry(settings, textvariable=self.attack_manual_start, width=8)
+        self.attack_manual_box.pack(side="left")
+        message = ttk.Frame(parent)
+        message.pack(fill="x", pady=(0, 6))
+        ttk.Label(message, text="Hidden message for the suite", style="Heading.TLabel").pack(side="left", padx=(0, 8))
+        self.attack_message_box = ttk.Entry(message, textvariable=self.attack_message)
+        self.attack_message_box.pack(side="left", fill="x", expand=True)
+        lab = ttk.Frame(parent)
+        lab.pack(fill="x", pady=(0, 6))
+        self.attack_box = ttk.Combobox(lab, textvariable=self.attack_choice, state="readonly", width=34,
+                                       values=[attack.label for attack in ATTACKS.values()])
+        self.attack_box.pack(side="left")
+        self.attack_button = ttk.Button(lab, text="Run attack", command=self.attack)
+        self.attack_button.pack(side="left", padx=(8, 0))
+        ttk.Label(parent, textvariable=self.attack_output, wraplength=820, justify="left").pack(anchor="w", pady=(0, 8))
+        ttk.Label(parent, textvariable=self.attack_verdict, style="Verdict.TLabel").pack(anchor="w")
+        ttk.Label(parent, textvariable=self.attack_result, wraplength=820, justify="left").pack(anchor="w", pady=(4, 6))
+        self.attack_statuses_table = self._table(parent, (("stage", "Verification stage", 240), ("status", "Status", 540)), height=4)
+        self.attack_statuses_table.tag_configure("done", foreground="#8fe0c3")
+        self.attack_statuses_table.tag_configure("running", foreground="#e8c5ff")
+        self.attack_statuses_table.tag_configure("pending", foreground="#8d7f9c")
+        ttk.Label(parent, textvariable=self.attack_copy, style="Muted.TLabel", wraplength=820).pack(anchor="w", pady=(4, 14))
+        ttk.Label(parent, text="Automated attack suite", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(parent, text="Protects the bundled samples and your selected file, runs every attack and verifier case\nin both start modes, and writes JSON, log and Markdown evidence.", justify="left").pack(anchor="w", pady=(6, 10))
         toolbar = ttk.Frame(parent)
         toolbar.pack(fill="x", pady=(0, 14))
-        self.test_button = ttk.Button(toolbar, text="Run reporting demo…", style="Primary.TButton", command=self.run_tests)
+        self.test_button = ttk.Button(toolbar, text="Run attack suite…", style="Primary.TButton", command=self.run_tests)
         self.test_button.pack(side="left")
         ttk.Label(toolbar, textvariable=self.test_summary, style="Heading.TLabel").pack(side="left", padx=18)
-        self.results_table = self._table(parent, (("case", "Scenario", 330), ("expected", "Expected", 150), ("actual", "Actual", 150), ("result", "Result", 70)), height=9)
+        self.results_table = self._table(parent, (("case", "Scenario", 300), ("expected", "Expected", 130), ("actual", "Actual", 130), ("result", "Result", 60), ("note", "Note", 320)), height=9)
         self.results_table.tag_configure("pass", foreground="#8fe0c3")
         self.results_table.tag_configure("fail", foreground="#ff9aaf")
         self.statuses_table.tag_configure("done", foreground="#8fe0c3")
@@ -266,24 +327,54 @@ class ApplicationWindow:
         self._clear_table(self.statuses_table)
         self.output.set("Selection changed. Run protect or verify.")
 
+    def _dialog(self, opener, **options):
+        """Open a native dialog centred on screen and above the app window.
+
+        The glass view keeps the Tk root withdrawn, and a dialog owned by a
+        hidden window can open behind the maximised browser window. A 1x1
+        topmost anchor gives Windows a visible owner to centre on and raise.
+        """
+        anchor = None
+        if isinstance(self.root, tk.Misc):
+            try:
+                anchor = tk.Toplevel(self.root)
+                anchor.overrideredirect(True)
+                anchor.attributes("-topmost", True)
+                width, height = anchor.winfo_screenwidth(), anchor.winfo_screenheight()
+                anchor.geometry(f"1x1+{width // 2}+{height // 2}")
+                anchor.update()
+                options["parent"] = anchor
+            except tk.TclError:
+                anchor = None
+        try:
+            return opener(**options)
+        finally:
+            if anchor is not None:
+                anchor.destroy()
+
     def choose(self):
-        path = filedialog.askopenfilename(filetypes=[("Supported media", "*.png *.bmp *.wav")])
+        path = self._dialog(filedialog.askopenfilename, title="Choose a media file",
+                            filetypes=[("Supported media", "*.png *.bmp *.wav")])
         if path:
             self.path.set(path)
 
-    def _apply_start_location(self):
-        """Configure the start-location service from the two GUI controls.
+    def _apply_start_location(self, mode=None, manual=None, passphrase=None):
+        """Configure the start-location service from the GUI controls.
 
+        Defaults to the workspace controls; the attack lab passes its own.
         Skipped when the configured locator takes neither, so other locator
         designs and test doubles keep working unchanged.  The controller and
         the verification engine share one locator instance, so setting it here
-        covers both protect and verify.
+        covers protect, verify and the attack lab alike.
         """
         locator = getattr(self.controller, "location", None)
         if not hasattr(type(locator), "key"):
             return
-        if self.start_mode.get() == "manual":
-            typed = self.manual_start.get().strip()
+        mode = self.start_mode.get() if mode is None else mode
+        manual = self.manual_start.get() if manual is None else manual
+        passphrase = self.passphrase.get() if passphrase is None else passphrase
+        if mode == "manual":
+            typed = manual.strip()
             if not typed:
                 raise IntegrationError(
                     "Enter a start position, or untick manual to derive one.")
@@ -294,12 +385,35 @@ class ApplicationWindow:
             locator.manual_start = position
             return
         locator.manual_start = None
-        passphrase = self.passphrase.get()
         if not passphrase:
             raise IntegrationError("Enter the start-location passphrase.")
         locator.key = passphrase
 
-    def _inputs(self):
+    def _attack_inputs(self, require_location=True):
+        """The attack lab's own file, depth and start-location settings."""
+        path = self.attack_path.get()
+        if not path:
+            raise IntegrationError("Choose a file for the attack lab first.")
+        try:
+            depth = int(self.attack_lsb.get())
+        except ValueError as exc:
+            raise IntegrationError("Choose an LSB depth from 1 to 8.") from exc
+        if not 1 <= depth <= 8:
+            raise IntegrationError("Choose an LSB depth from 1 to 8.")
+        try:
+            self._apply_start_location(self.attack_start_mode.get(), self.attack_manual_start.get(),
+                                       self.attack_passphrase.get())
+        except IntegrationError:
+            if require_location:
+                raise
+        return path, depth
+
+    def _inputs(self, require_location=True):
+        """Selected path and LSB depth, with the start-location service configured.
+
+        ``require_location=False`` lets a media-level attack proceed without a
+        passphrase or position; the verification that follows will ask for it.
+        """
         if not self.path.get():
             raise IntegrationError("Choose an image or audio file first.")
         try:
@@ -308,15 +422,22 @@ class ApplicationWindow:
             raise IntegrationError("Choose an LSB depth from 1 to 8.") from exc
         if not 1 <= depth <= 8:
             raise IntegrationError("Choose an LSB depth from 1 to 8.")
-        self._apply_start_location()
+        try:
+            self._apply_start_location()
+        except IntegrationError:
+            if require_location:
+                raise
         return self.path.get(), depth
 
     def _set_busy(self, busy):
         self.busy = busy
-        for button in (self.browse_button, self.protect_button, self.verify_button, self.test_button):
+        for button in (self.browse_button, self.protect_button, self.verify_button, self.test_button,
+                       self.attack_button, self.attack_browse_button):
             button.configure(state="disabled" if busy else "normal")
-        self.lsb_box.configure(state="disabled" if busy else "readonly")
-        for box in (self.passphrase_box, getattr(self, "payload_box", None), self.manual_box, self.mode_box):
+        for box in (self.attack_box, self.lsb_box, self.attack_lsb_box):
+            box.configure(state="disabled" if busy else "readonly")
+        for box in (self.passphrase_box, getattr(self, "payload_box", None), self.manual_box, self.mode_box,
+                    self.attack_passphrase_box, self.attack_mode_box, self.attack_manual_box, self.attack_message_box):
             if box is None:
                 continue
             box.configure(state="disabled" if busy else "normal")
@@ -413,7 +534,7 @@ class ApplicationWindow:
 
     # ------------------------------------------------------------ live stages
 
-    def _watch_stages(self):
+    def _watch_stages(self, table=None):
         """Show each verification stage as it starts.
 
         The engine calls ``on_stage`` from the worker thread, so the callback
@@ -426,11 +547,12 @@ class ApplicationWindow:
         stages = tuple(getattr(type(engine), "STAGES", ()))
         if not stages or not hasattr(engine, "on_stage"):
             return lambda handler: handler
-        self._progress = (stages, 0)
+        table = table if table is not None else self.statuses_table
+        self._progress = (stages, 0, table)
         self._draw_progress()
 
         def started(stage):
-            self._progress = (stages, stages.index(stage) if stage in stages else 0)
+            self._progress = (stages, stages.index(stage) if stage in stages else 0, table)
             self._progress_dirty = True
         engine.on_stage = started
 
@@ -445,8 +567,8 @@ class ApplicationWindow:
     def _draw_progress(self):
         if self._progress is None:
             return
-        stages, current = self._progress
-        self._clear_table(self.statuses_table)
+        stages, current, table = self._progress
+        self._clear_table(table)
         for index, stage in enumerate(stages):
             if index < current:
                 status, tag = "Passed", "done"
@@ -454,7 +576,7 @@ class ApplicationWindow:
                 status, tag = "Checking…", "running"
             else:
                 status, tag = "Waiting", "pending"
-            self.statuses_table.insert("", "end", values=(stage.capitalize(), status), tags=(tag,))
+            table.insert("", "end", values=(stage.capitalize(), status), tags=(tag,))
 
     def _verification_error(self, exc):
         self.verdict.set("Cannot Verify")
@@ -471,34 +593,215 @@ class ApplicationWindow:
         for stage, status in result.statuses.items():
             self.statuses_table.insert("", "end", values=(stage.capitalize(), status))
 
+    # ------------------------------------------------------------- attack lab
+
+    def choose_attack(self):
+        path = self._dialog(filedialog.askopenfilename, title="Choose a file to attack",
+                            filetypes=[("Supported media", "*.png *.bmp *.wav")])
+        if path:
+            self.attack_path.set(path)
+            self.attack_output.set("")
+
+    def attack(self, attack_id=None):
+        """Attack the studio's file, save the copy beside it and verify it."""
+        if self.busy:
+            return
+        if attack_id is None:
+            attack_id = next((a.id for a in ATTACKS.values() if a.label == self.attack_choice.get()), None)
+        attack = ATTACKS.get(attack_id)
+        if attack is None:
+            self.attack_output.set("Choose an attack first.")
+            return
+        try:
+            # Only payload-level attacks need the start location up front.
+            path, depth = self._attack_inputs(require_location=attack.targets_payload)
+        except IntegrationError as exc:
+            self.attack_output.set(str(exc))
+            return
+        self.attack_output.set(f"Applying '{attack.label}'…")
+        self.attack_verdict.set("Attacking…")
+        self.attack_result.set(f"Applying '{attack.label}' and saving the attacked copy.")
+        self.attack_decoded.set("")
+        self.attack_source.set(path)
+        self.attack_copy.set("")
+        self._clear_table(self.attack_statuses_table)
+        # Read the Tk variables here; the worker thread must not touch them.
+        where = (f"manual position {self.attack_manual_start.get().strip() or '?'}"
+                 if self.attack_start_mode.get() == "manual" else "the position derived from your passphrase")
+
+        def work():
+            media = self.controller.load(path)
+            context = AttackContext(lsb=depth, seed=depth)
+            if attack.targets_payload:
+                context = AttackContext(lsb=depth, start=self.controller.location.recover(media, depth),
+                                        service=self.controller.service_for(media), seed=depth)
+            try:
+                attacked = apply_attack(attack.id, media, context)
+            except IntegrationError as exc:
+                if not attack.targets_payload:
+                    raise
+                found = self._payload_depths(media, depth)
+                positions = [] if found else self._envelope_positions(media, depth)
+                if found:
+                    hint = (f" With these same settings a payload IS found at LSB depth {found[0]}: "
+                            f"set the lab depth to {found[0]}.")
+                elif positions:
+                    hint = (f" At LSB depth {depth} a payload sits at position {positions[0]:,}: "
+                            f"set the lab to Manual with position {positions[0]:,}.")
+                else:
+                    hint = (" Choose the saved stego copy (not the original or an already attacked copy) and "
+                            "use exactly the depth, mode and passphrase or position it was protected with.")
+                raise IntegrationError(
+                    f"{exc} This attack rewrites the hidden payload, so the lab must find it first: "
+                    f"it looked at LSB depth {depth}, {where}.{hint}") from exc
+            source = Path(path)
+            # Each source file gets its own folder under "attacks", and every
+            # attacked copy is named by the date and time it was made.
+            if source.parent.parent.name == "attacks":
+                folder = source.parent  # attacking an attacked copy: stay in its folder
+            else:
+                folder = source.parent / "attacks" / source.stem
+            folder.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            target = folder / f"{stamp}_{attack.id}{attacked.suffix}"
+            counter = 1
+            while target.exists():
+                counter += 1
+                target = folder / f"{stamp}_{attack.id}-{counter}{attacked.suffix}"
+            self.controller.save(attacked, str(target))
+            return target
+
+        def done(target):
+            # The studio keeps the file you chose, so the next attack starts clean again.
+            self.attack_copy.set(str(target))
+            self.attack_preview_version += 1
+            self.attack_output.set(f"Saved attacked copy: {target}\nVerifying it…")
+            self._verify_attacked(attack, target, depth)
+
+        def failed(exc):
+            self.attack_verdict.set("Attack failed")
+            self.attack_result.set(str(exc))
+            self.attack_output.set(f"Attack failed: {exc}")
+
+        self._submit(work, done, failed)
+
+    def _payload_depths(self, media, skip_depth):
+        """Other LSB depths at which the studio's settings do find an envelope.
+
+        A wrong depth is the commonest reason a payload attack cannot find the
+        envelope, so the lab checks the other depths and names the right one.
+        """
+        found = []
+        for other in range(1, 9):
+            if other == skip_depth:
+                continue
+            try:
+                start = self.controller.location.recover(media, other)
+                self.controller.service_for(media).extract(media, other, start)
+                found.append(other)
+            except Exception:
+                continue
+        return found
+
+    @staticmethod
+    def _envelope_positions(media, depth):
+        """Where envelopes really sit at this depth, for the lab's hints (worker thread)."""
+        try:
+            from src.gui.diagnostics import find_envelopes
+            return [start for start, _ in find_envelopes(media, depth)]
+        except Exception:
+            return []
+
+    def _verify_attacked(self, attack, target, depth):
+        """Verify an attacked copy with the studio's settings, as Party B would."""
+        label = attack.label
+
+        def cannot(exc):
+            self.attack_verdict.set("Cannot Verify")
+            self.attack_result.set(str(exc))
+            self.attack_output.set(f"{label}: Cannot Verify. {exc}")
+
+        try:
+            self._attack_inputs()
+        except IntegrationError as exc:
+            cannot(exc)
+            return
+        self.attack_verdict.set("Verifying…")
+        self.attack_result.set("Checking the attacked copy the way Party B would.")
+        manual = self.attack_start_mode.get() == "manual"
+        typed = self.attack_manual_start.get().strip()
+
+        def work():
+            result = self.controller.verify(str(target), depth)
+            hint = ""
+            if result.verdict is Verdict.PAYLOAD_MISSING and not attack.targets_payload:
+                if manual:
+                    # A media-level attack leaves the payload where it was, so a missing
+                    # payload in manual mode almost always means a wrong position.
+                    positions = self._envelope_positions(self.controller.load(str(target)), depth)
+                    if positions and str(positions[0]) != typed:
+                        hint = (f" The payload actually sits at position {positions[0]:,}, not {typed or '?'}: "
+                                f"set the lab position to {positions[0]:,} and run the attack again.")
+                else:
+                    hint = (" Why not Tampered: in Automatic mode the start position is derived from the "
+                            "file content, so any edit moves it and the payload cannot be found "
+                            "(verification docs, section 7). Use Manual with the position the file was "
+                            "protected at to see Tampered.")
+            return result, hint
+
+        def show(outcome):
+            result, hint = outcome
+            self.attack_verdict.set(result.verdict.value)
+            self.attack_result.set(result.message + hint)
+            self.attack_decoded.set(getattr(result, "decoded_payload", None) or "")
+            self._clear_table(self.attack_statuses_table)
+            for stage, status in result.statuses.items():
+                self.attack_statuses_table.insert("", "end", values=(stage.capitalize(), status))
+            self.attack_output.set(f"{label}: {result.verdict.value}.")
+
+        finish = self._watch_stages(self.attack_statuses_table)
+        self._submit(work, finish(show), finish(cannot))
+
     def run_tests(self):
         if self.busy:
             return
-        destination = filedialog.askdirectory(title="Choose test evidence folder")
+        destination = self._dialog(filedialog.askdirectory, title="Choose test evidence folder")
         if not destination:
             return
         self._clear_table(self.results_table)
         self.test_summary.set("Running…")
-        self.test_output.set("Processing canned results and writing evidence…")
-        self._submit(lambda: self.runner.run(build_demo_scenarios(), destination),
+        self.test_output.set(f"Evidence folder: {destination}\nProtecting, attacking and verifying every scenario…")
+        builder = self.scenarios or self._real_scenarios
+        self._submit(lambda: self.runner.run(builder(destination), destination),
                      self._show_report, self._test_error)
+
+    def _real_scenarios(self, folder):
+        covers = list(DEFAULT_COVERS)
+        selected = self.attack_path.get()
+        if selected and Path(selected).suffix.lower() in {".png", ".bmp", ".wav"} and Path(selected).is_file():
+            covers.append(Path(selected))
+        # The studio's file may itself be a stego file, so only the bundled
+        # samples are treated as known-clean covers.
+        message = self.attack_message.get().strip() or MESSAGE
+        return build_real_scenarios(folder, covers=covers, clean_covers=DEFAULT_COVERS, message=message)
 
     def _show_report(self, report):
         for row in report["results"]:
             self.results_table.insert("", "end", values=(row["name"], row["expected"],
-                row["actual"] or "Execution error", "PASS" if row["passed"] else "FAIL"),
+                row["actual"] or "Execution error", "PASS" if row["passed"] else "FAIL", row.get("note", "")),
                 tags=("pass" if row["passed"] else "fail",))
         self.test_summary.set(f"{report['passed']}/{report['total']} passed · {report['failed']} failed")
-        self.test_output.set(f"Runner demo: {report['passed']}/{report['total']} passed; {report['failed']} failed.\nEvidence: {report['evidence_dir']}")
+        self.test_output.set(f"Evidence saved to {report['evidence_dir']}\nresults.json, results.log and results.md")
 
     def _test_error(self, exc):
         self.test_summary.set("Run failed")
-        self.test_output.set(f"Cannot complete reporting demo: {exc}")
+        self.test_output.set(f"Cannot complete the attack suite: {exc}")
 
     def save(self):
         if self.busy or self.protected is None:
             return
-        path = filedialog.asksaveasfilename(defaultextension=self.protected.suffix,
+        path = self._dialog(filedialog.asksaveasfilename, title="Save stego file",
+            defaultextension=self.protected.suffix,
             initialfile=f"{Path(self.path.get()).stem}_stego{self.protected.suffix}",
             filetypes=[("Stego media", f"*{self.protected.suffix}")])
         if path:

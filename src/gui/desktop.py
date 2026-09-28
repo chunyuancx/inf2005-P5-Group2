@@ -15,8 +15,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 import webbrowser
 
+from src.attacks import ATTACKS, describe
 from src.gui.app import ApplicationWindow
 from src.gui.preview import audio_difference, image_difference
+from src.models import MediaType
 
 MEDIA_TYPES = {".png": "image/png", ".bmp": "image/bmp", ".wav": "audio/wav"}
 
@@ -49,16 +51,20 @@ class TableState:
 
 class GlassDesktop(ApplicationWindow):
     controls = ("browse_button", "protect_button", "verify_button", "save_button",
-                "test_button", "lsb_box", "passphrase_box", "payload_box", "mode_box", "manual_box")
+                "test_button", "lsb_box", "passphrase_box", "payload_box", "mode_box", "manual_box",
+                "attack_button", "attack_box", "attack_browse_button", "attack_lsb_box",
+                "attack_passphrase_box", "attack_mode_box", "attack_manual_box", "attack_message_box")
 
-    def __init__(self, root, controller, runner=None):
-        self._initialize_state(root, controller, runner)
+    def __init__(self, root, controller, runner=None, scenarios=None):
+        self._initialize_state(root, controller, runner, scenarios)
         root.withdraw()
         for name in self.controls:
             setattr(self, name, ControlState())
         self.save_button.configure(state="disabled")
         self.lsb_box.configure(state="readonly")
+        self.attack_lsb_box.configure(state="readonly")
         self.statuses_table, self.results_table = TableState(), TableState()
+        self.attack_statuses_table = TableState()
         self.path.trace_add("write", self.invalidate)
         self.lsb.trace_add("write", self.invalidate)
         self.payload.trace_add("write", self.invalidate)
@@ -81,6 +87,21 @@ class GlassDesktop(ApplicationWindow):
             "output": self.output.get(), "verdict": self.verdict.get(),
             "decoded_payload": self.decoded_payload.get(),
             "test_output": self.test_output.get(), "test_summary": self.test_summary.get(),
+            "attack_output": self.attack_output.get(),
+            "attack_path": self.attack_path.get(), "attack_lsb": self.attack_lsb.get(),
+            "attack_passphrase_set": bool(self.attack_passphrase.get()),
+            "attack_start_mode": self.attack_start_mode.get(),
+            "attack_manual_start": self.attack_manual_start.get(),
+            "attack_message": self.attack_message.get(),
+            "attack_verdict": self.attack_verdict.get(), "attack_result": self.attack_result.get(),
+            "attack_decoded": self.attack_decoded.get(),
+            "attack_source": self.attack_source.get(), "attack_copy": self.attack_copy.get(),
+            "attack_copy_kind": self._kind_of(self.attack_copy.get()),
+            "attack_source_kind": self._kind_of(self.attack_source.get()),
+            "attack_preview_version": self.attack_preview_version,
+            "attack_statuses": list(self.attack_statuses_table.rows.values()),
+            # Only the attacks that apply to the studio file's type; none until a file is chosen.
+            "attacks": describe(MediaType(self.attack_kind())) if self.attack_kind() else [],
             "protected": self.protected is not None,
             "save_ready": self.protected is not None and self.verified_protected,
             "media_kind": self.media_kind(),
@@ -97,6 +118,18 @@ class GlassDesktop(ApplicationWindow):
         if suffix == ".wav":
             return "audio"
         return None
+
+    @staticmethod
+    def _kind_of(path):
+        suffix = Path(path).suffix.lower() if path else ""
+        return "image" if suffix in {".png", ".bmp"} else "audio" if suffix == ".wav" else None
+
+    def attack_kind(self):
+        return self._kind_of(self.attack_path.get())
+
+    def attack_sources(self):
+        """Paths of the last attack's source file and attacked copy (Tk thread)."""
+        return {"source": self.attack_source.get(), "copy": self.attack_copy.get()}
 
     def preview_sources(self):
         """Selected path and protected buffer for the preview endpoints.
@@ -142,7 +175,24 @@ class GlassDesktop(ApplicationWindow):
             if str(depth) not in {str(i) for i in range(1, 9)}:
                 raise ValueError("Choose an LSB depth from 1 to 8.")
             self.lsb.set(str(depth))
-        elif name in {"choose", "protect", "verify", "save", "run_tests"}:
+        elif name == "attack":
+            if payload.get("value") not in ATTACKS:
+                raise ValueError("Choose an attack from the list.")
+            self.attack(payload["value"])
+        elif name in {"attack_passphrase", "attack_manual_start", "attack_message"}:
+            value = payload.get("value")
+            if value is not None and not isinstance(value, str):
+                raise ValueError("Value must be text.")
+            getattr(self, name).set(value or "")
+        elif name == "attack_start_mode":
+            if payload.get("value") not in {"auto", "manual"}:
+                raise ValueError("Start mode must be automatic or manual.")
+            self.attack_start_mode.set(payload["value"])
+        elif name == "attack_lsb":
+            if str(payload.get("value")) not in {str(i) for i in range(1, 9)}:
+                raise ValueError("Choose an LSB depth from 1 to 8.")
+            self.attack_lsb.set(str(payload["value"]))
+        elif name in {"choose", "choose_attack", "protect", "verify", "save", "run_tests"}:
             getattr(self, name)()
         else:
             raise ValueError("Unknown action")
@@ -195,7 +245,7 @@ def make_server(desktop):
             self.end_headers()
             try:
                 self.wfile.write(body)
-            except (BrokenPipeError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 pass
 
         def authorized(self):
@@ -226,6 +276,9 @@ def make_server(desktop):
             self.send(200, (assets / name).read_bytes(), types[name])
 
         def send_preview(self, which):
+            if which.startswith("attack-"):
+                self.send_attack_preview(which.removeprefix("attack-"))
+                return
             try:
                 sources = desktop.invoke(desktop.preview_sources)
                 kind = MEDIA_TYPES.get(sources["suffix"])
@@ -249,10 +302,40 @@ def make_server(desktop):
                 else:
                     changed, total = audio_difference(original, sources["protected"])
                     self.send(200, json.dumps({"changed": changed, "total": total}).encode())
-            except (BrokenPipeError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 pass
             except Exception:
                 # Unreadable media or a size mismatch simply shows no preview.
+                self.send(404, b'{}')
+
+        def send_attack_preview(self, which):
+            """Before/after/difference of the last attack, read from the saved files."""
+            try:
+                paths = desktop.invoke(desktop.attack_sources)
+                source, copy = Path(paths["source"]), Path(paths["copy"])
+                if which == "source" and paths["source"]:
+                    self.send(200, source.read_bytes(), MEDIA_TYPES[source.suffix.lower()])
+                    return
+                if not paths["copy"]:
+                    raise ValueError("No attacked copy yet")
+                if which == "copy":
+                    self.send(200, copy.read_bytes(), MEDIA_TYPES[copy.suffix.lower()])
+                    return
+                if which != "difference":
+                    raise ValueError("Unknown preview")
+                before, after = source.read_bytes(), copy.read_bytes()
+                if MEDIA_TYPES[copy.suffix.lower()].startswith("image/"):
+                    diff = image_difference(before, after)
+                    self.send(200, diff.png, "image/png",
+                              extra={"X-Changed": str(diff.changed), "X-Total": str(diff.total),
+                                     "X-Box": ",".join(map(str, diff.box)) if diff.box else "",
+                                     "X-Scale": f"{diff.scale:.2f}"})
+                else:
+                    changed, total = audio_difference(before, after)
+                    self.send(200, json.dumps({"changed": changed, "total": total}).encode())
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                pass
+            except Exception:
                 self.send(404, b'{}')
 
         def do_POST(self):
@@ -276,6 +359,60 @@ def make_server(desktop):
     return server, f"http://127.0.0.1:{server.server_port}/{token}/index.html"
 
 
+WINDOW_TITLE = "Media Integrity | Glass workspace"
+
+
+def _windows_titled(title: str) -> list:
+    """Handles of visible top-level windows with exactly this title (Windows only)."""
+    if os.name != "nt":
+        return []
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    found = []
+
+    def collect(hwnd, _):
+        if user32.IsWindowVisible(hwnd):
+            buffer = ctypes.create_unicode_buffer(256)
+            user32.GetWindowTextW(hwnd, buffer, 256)
+            if buffer.value == title:
+                found.append(hwnd)
+        return True
+    user32.EnumWindows(callback_type(collect), 0)
+    return found
+
+
+def _close_stale_windows(title: str) -> int:
+    """Close app windows left over from earlier sessions, which can only show
+    'Session disconnected' and would otherwise sit in front of the new one."""
+    if os.name != "nt":
+        return 0
+    import ctypes
+    stale = _windows_titled(title)
+    for hwnd in stale:
+        ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+    return len(stale)
+
+
+def _maximize_when_visible(title: str, ignore=(), timeout: float = 15.0) -> bool:
+    """Maximise and raise the first new window with this title (Windows only)."""
+    if os.name != "nt":
+        return False
+    import ctypes
+    user32 = ctypes.windll.user32
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        found = [hwnd for hwnd in _windows_titled(title) if hwnd not in ignore]
+        if found:
+            user32.ShowWindow(found[0], 3)  # SW_MAXIMIZE
+            user32.SetForegroundWindow(found[0])
+            return True
+        time.sleep(0.2)
+    return False
+
+
 def launch(root, controller, *, open_window=True):
     desktop = GlassDesktop(root, controller)
     server, url = make_server(desktop)
@@ -286,10 +423,12 @@ def launch(root, controller, *, open_window=True):
                     Path(os.environ.get("PROGRAMFILES", "")) / "Google/Chrome/Application/chrome.exe"]
         browser = next((path for path in browsers if path.is_file()), None)
         if browser:
-            # Fill the screen so the whole workspace is visible without scrolling.
-            width, height = root.winfo_screenwidth(), root.winfo_screenheight()
-            subprocess.Popen([str(browser), f"--app={url}", "--start-maximized",
-                              "--window-position=0,0", f"--window-size={width},{height}"])
+            # Edge/Chrome app windows restore their last bounds and can ignore
+            # --start-maximized, so the window is also maximised once it appears.
+            stale = tuple(_windows_titled(WINDOW_TITLE))
+            _close_stale_windows(WINDOW_TITLE)
+            subprocess.Popen([str(browser), f"--app={url}", "--start-maximized"])
+            Thread(target=_maximize_when_visible, args=(WINDOW_TITLE, stale), daemon=True).start()
         else:
             webbrowser.open(url)
     try:
