@@ -105,6 +105,12 @@ h2 { margin: 0; font-weight: 480; font-size: 21px; letter-spacing: -.7px; }.mute
 .passphrase-field input::placeholder { color: #7c7090; letter-spacing: 0; }
 .passphrase-field input:focus { outline: none; border-color: #e7c9ff88; box-shadow: 0 0 15px #c591fb2e; }
 .passphrase-field input:disabled { opacity: .5; }
+.payload-field { display: block; margin: 14px 0 6px; }
+.payload-field span { display: block; font-size: 10px; letter-spacing: .12em; color: var(--muted); margin-bottom: 7px; }
+.payload-field textarea { width: 100%; box-sizing: border-box; min-height: 68px; padding: 9px 12px; resize: vertical; border: 1px solid #c8a9e623; border-radius: 7px; background: #e6bdff06; color: #faf5ff; font-family: inherit; font-size: 13px; line-height: 1.4; }
+.payload-field textarea::placeholder { color: #7c7090; }
+.payload-field textarea:focus { outline: none; border-color: #e7c9ff88; box-shadow: 0 0 15px #c591fb2e; }
+.payload-field textarea:disabled { opacity: .5; }
 .start-mode { display: flex; gap: 5px; align-items: center; margin: 0 0 9px; }
 .start-mode button { height: 31px; padding: 0 14px; border: 1px solid #c8a9e623; border-radius: 7px; background: #e6bdff06; color: #c4afd6; font-size: 11px; font-family: inherit; }
 .start-mode button[aria-pressed="true"] { background: linear-gradient(145deg,#edc5ff,#bf9be7); border-color: #f1d6ff; color: #312041; box-shadow: 0 0 15px #c591fb2e; }
@@ -112,3 +118,6 @@ h2 { margin: 0; font-weight: 480; font-size: 21px; letter-spacing: -.7px; }.mute
 .start-mode input { flex: 1; min-width: 0; height: 31px; box-sizing: border-box; padding: 0 10px; border: 1px solid #c8a9e623; border-radius: 7px; background: #e6bdff06; color: #faf5ff; font-family: inherit; font-size: 12px; }
 .start-mode input:focus { outline: none; border-color: #e7c9ff88; }
 .start-mode input[hidden] { display: none; }
+.decoded-payload { margin-top: 16px; padding: 12px 14px; border: 1px solid #a7dec833; border-radius: 10px; background: #a7dec80b; }
+.decoded-payload span { display: block; color: #a7dec8; font-size: 9px; letter-spacing: 1.4px; }
+.decoded-payload p { margin: 7px 0 0; color: #d9eee5; font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
