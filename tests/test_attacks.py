@@ -80,6 +80,13 @@ def test_registry_and_errors():
     listing = describe()
     assert {row["id"] for row in listing} >= {"pixel_edit", "sample_edit", "lsb_noise", "edit_payload"}
     assert sorted(ATTACKS["lsb_noise"].kinds) == [MediaType.AUDIO, MediaType.IMAGE]
+    # Shared attack ids are worded for the file type they are listed for.
+    by_id = lambda kind: {row["id"]: row for row in describe(kind)}
+    assert by_id(MediaType.IMAGE)["reencode_lossless"]["label"] == "Re-save losslessly"
+    assert by_id(MediaType.AUDIO)["reencode_lossless"]["label"] == "Re-write the WAV"
+    assert "channel" in by_id(MediaType.IMAGE)["lsb_noise"]["description"]
+    assert "sample" in by_id(MediaType.AUDIO)["lsb_noise"]["description"]
+    assert "sample_edit" not in by_id(MediaType.IMAGE) and "pixel_edit" not in by_id(MediaType.AUDIO)
     assert all(row["targets_payload"] for row in describe() if row["id"] in {"edit_payload", "corrupt_signature", "wipe_payload"})
     with pytest.raises(IntegrationError):
         apply_attack("no_such_attack", load(IMAGE_COVER))

@@ -9,7 +9,7 @@ steganography service that framed it; see :class:`AttackContext`.
 The registry is what the GUI attack lab, the automated scenario suite and the
 unit tests share, so an attack added here appears everywhere.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 from src.exceptions import IntegrationError
@@ -34,9 +34,16 @@ class Attack:
     kinds: frozenset
     targets_payload: bool
     run: Callable[[Media, AttackContext], Media]
+    texts: dict = field(default_factory=dict)  # MediaType -> (label, description)
 
     def applies_to(self, kind: MediaType | None) -> bool:
         return kind is not None and kind in self.kinds
+
+    def label_for(self, kind: MediaType | None) -> str:
+        return self.texts.get(kind, (self.label, self.description))[0]
+
+    def description_for(self, kind: MediaType | None) -> str:
+        return self.texts.get(kind, (self.label, self.description))[1]
 
     def __call__(self, media: Media, context: AttackContext | None = None) -> Media:
         return apply_attack(self.id, media, context)
@@ -53,8 +60,9 @@ def register(attack_id: str, label: str, description: str, kinds: frozenset,
              targets_payload: bool = False):
     def wrap(function):
         existing = ATTACKS.get(attack_id)
+        texts = {kind: (label, description) for kind in kinds}
         if existing is None:
-            ATTACKS[attack_id] = Attack(attack_id, label, description, kinds, targets_payload, function)
+            ATTACKS[attack_id] = Attack(attack_id, label, description, kinds, targets_payload, function, texts)
             return function
         # The same attack name for another media type: dispatch on the kind.
         if existing.kinds & kinds or existing.targets_payload != targets_payload:
@@ -64,7 +72,8 @@ def register(attack_id: str, label: str, description: str, kinds: frozenset,
         def dispatch(media, context, _new_kinds=kinds):
             return function(media, context) if media.kind in _new_kinds else previous(media, context)
         ATTACKS[attack_id] = Attack(attack_id, existing.label, existing.description,
-                                    existing.kinds | kinds, targets_payload, dispatch)
+                                    existing.kinds | kinds, targets_payload, dispatch,
+                                    {**existing.texts, **texts})
         return function
     return wrap
 
@@ -92,8 +101,8 @@ def apply_attack(attack_id: str, media: Media, context: AttackContext | None = N
 
 
 def describe(kind: MediaType | None = None) -> list[dict]:
-    """JSON-friendly listing for front ends."""
-    return [{"id": attack.id, "label": attack.label, "description": attack.description,
+    """JSON-friendly listing for front ends, worded for the given media type."""
+    return [{"id": attack.id, "label": attack.label_for(kind), "description": attack.description_for(kind),
              "kinds": sorted(k.value for k in attack.kinds), "targets_payload": attack.targets_payload}
             for attack in (attacks_for(kind) if kind else ATTACKS.values())]
 
