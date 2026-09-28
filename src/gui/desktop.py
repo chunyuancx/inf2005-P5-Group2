@@ -287,10 +287,10 @@ def launch(root, controller, *, open_window=True):
                     Path(os.environ.get("PROGRAMFILES", "")) / "Google/Chrome/Application/chrome.exe"]
         browser = next((path for path in browsers if path.is_file()), None)
         if browser:
-            # Fill the screen so the whole workspace is visible without scrolling.
-            width, height = root.winfo_screenwidth(), root.winfo_screenheight()
-            subprocess.Popen([str(browser), f"--app={url}", "--start-maximized",
-                              "--window-position=0,0", f"--window-size={width},{height}"])
+            # Maximised on the primary display so the whole workspace is visible
+            # without scrolling. An explicit --window-size would override
+            # --start-maximized and, on scaled displays, open a half-size window.
+            subprocess.Popen([str(browser), f"--app={url}", "--start-maximized"])
         else:
             webbrowser.open(url)
     try:
