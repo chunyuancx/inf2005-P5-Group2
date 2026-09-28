@@ -38,8 +38,8 @@ function render(next) {
   // The session holds a passphrase the page never receives; say so after a refresh.
   const manual = next.start_mode === 'manual';
   for (const button of $$('[data-mode]')) button.setAttribute('aria-pressed', String(button.dataset.mode === next.start_mode));
-  $('#manual-start').hidden = !manual;
-  $('#passphrase-block').hidden = manual;  // the passphrase only matters in Automatic mode
+  $('#position-block').hidden = !manual;   // the position only matters in Manual mode
+  $('#passphrase-block').hidden = manual;   // the passphrase only matters in Automatic mode
   // Never overwrite a position the user has typed but not yet sent: a click on
   // Protect blurs the box, and the next render would otherwise erase it.
   if (!manualDirty && document.activeElement !== $('#manual-start')) $('#manual-start').value = next.manual_start;
@@ -65,7 +65,7 @@ function render(next) {
   }
   const labManual = next.attack_start_mode === 'manual';
   for (const button of $$('[data-attack-mode]')) button.setAttribute('aria-pressed', String(button.dataset.attackMode === next.attack_start_mode));
-  $('#attack-manual-start').hidden = !labManual;
+  $('#attack-position-block').hidden = !labManual;
   $('#attack-passphrase').closest('.lab-settings').hidden = labManual;
   if (!labDirty.manual && document.activeElement !== $('#attack-manual-start')) $('#attack-manual-start').value = next.attack_manual_start;
   if (!labDirty.message && document.activeElement !== $('#attack-message')) $('#attack-message').value = next.attack_message || '';
