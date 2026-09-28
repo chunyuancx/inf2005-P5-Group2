@@ -57,7 +57,11 @@
           <label class="payload-field" for="payload"><span>PAYLOAD TO EMBED</span><textarea id="payload" data-control="payload_box" rows="3" maxlength="4096" spellcheck="false" placeholder="Type the message you want to hide"></textarea></label>
           <p class="tiny muted">This text is signed and embedded in the protected media.</p>
           <p class="tiny muted lab-label-line">START LOCATION</p>
-          <div class="start-mode" role="group" aria-label="Start location mode"><button id="mode-auto" data-mode="auto" data-control="mode_box" aria-pressed="true">Automatic</button><button id="mode-manual" data-mode="manual" data-control="mode_box" aria-pressed="false">Manual</button><input type="number" id="manual-start" data-control="manual_box" min="1" step="1" placeholder="Position" aria-label="Manual start position"></div>
+          <div class="start-mode" role="group" aria-label="Start location mode"><button id="mode-auto" data-mode="auto" data-control="mode_box" aria-pressed="true">Automatic</button><button id="mode-manual" data-mode="manual" data-control="mode_box" aria-pressed="false">Manual</button></div>
+          <div id="position-block" hidden>
+          <label class="passphrase-field" for="manual-start"><span>POSITION</span><input type="number" id="manual-start" data-control="manual_box" min="1" step="1" placeholder="Enter position here" aria-label="Manual start position"></label>
+          <p class="tiny muted">The unit where the payload starts. Party B needs this same number and depth.</p>
+          </div>
           <div id="passphrase-block">
           <label class="passphrase-field" for="passphrase"><span>PASSPHRASE</span><input type="password" id="passphrase" data-control="passphrase_box" autocomplete="off" spellcheck="false" placeholder="Enter your secret passphrase"></label>
           <p class="tiny muted" id="passphrase-hint">Decides where the payload hides. Party B needs this same passphrase. It is never stored in the file.</p>
@@ -88,7 +92,10 @@
         <div class="depth-heading lab-depth"><span class="lab-label">LSB DEPTH</span><span class="depth-value"><b id="attack-depth-value">1</b><small>BIT LSB</small></span></div>
         <div class="depth-selector" role="group" aria-label="Attack lab LSB depth"><button data-attack-depth="1" aria-pressed="true">1</button><button data-attack-depth="2" aria-pressed="false">2</button><button data-attack-depth="3" aria-pressed="false">3</button><button data-attack-depth="4" aria-pressed="false">4</button><button data-attack-depth="5" aria-pressed="false">5</button><button data-attack-depth="6" aria-pressed="false">6</button><button data-attack-depth="7" aria-pressed="false">7</button><button data-attack-depth="8" aria-pressed="false">8</button></div>
         <p class="tiny muted lab-label-line">START LOCATION</p>
-        <div class="start-mode" role="group" aria-label="Attack lab start location mode"><button data-attack-mode="auto" data-control="attack_mode_box" aria-pressed="true">Automatic</button><button data-attack-mode="manual" data-control="attack_mode_box" aria-pressed="false">Manual</button><input type="number" id="attack-manual-start" data-control="attack_manual_box" min="1" step="1" placeholder="Position" aria-label="Attack lab manual start position" hidden></div>
+        <div class="start-mode" role="group" aria-label="Attack lab start location mode"><button data-attack-mode="auto" data-control="attack_mode_box" aria-pressed="true">Automatic</button><button data-attack-mode="manual" data-control="attack_mode_box" aria-pressed="false">Manual</button></div>
+        <div id="attack-position-block" class="lab-settings" hidden>
+          <label class="lab-field grow" for="attack-manual-start"><span>POSITION</span><input type="number" id="attack-manual-start" data-control="attack_manual_box" min="1" step="1" placeholder="Enter position here" aria-label="Attack lab manual start position"></label>
+        </div>
         <div class="lab-settings">
           <label class="lab-field grow" for="attack-passphrase"><span>PASSPHRASE</span><input type="password" id="attack-passphrase" data-control="attack_passphrase_box" autocomplete="off" spellcheck="false" placeholder="Passphrase the file was protected with"></label>
         </div>
