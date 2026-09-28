@@ -77,7 +77,8 @@
 
     <main id="testing" class="board test-board" hidden aria-label="Test studio">
       <section class="glass demo-card"><header class="card-heading"><span>ATTACK LAB</span></header><div class="card-content">
-        <h2>Break it on purpose.</h2><p class="muted">Apply an attack to the stego file selected in the workspace. The attacked copy is saved next to it and verified straight away.</p>
+        <h2>Break it on purpose.</h2><p class="muted">Apply an attack to a stego file. The attacked copy is saved next to it and verified straight away.</p>
+        <div class="attack-file"><span class="tiny muted" id="attack-file">No file selected</span><button class="secondary-button" data-action="choose" data-control="browse_button">Choose file</button></div>
         <label class="attack-field" for="attack-select"><span>ATTACK</span><select id="attack-select" data-control="attack_box"></select></label>
         <p class="tiny muted" id="attack-description">Choose a file in the workspace to see the attacks for its type.</p>
         <button class="primary-button" data-action="attack" data-control="attack_button"><svg><use href="#flask"/></svg>Attack selected file</button>

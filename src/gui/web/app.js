@@ -48,6 +48,7 @@ function render(next) {
   $('#test-summary').textContent = next.test_summary;
   $('#test-output').textContent = next.test_output;
   $('#attack-output').textContent = next.attack_output;
+  $('#attack-file').textContent = file ? `Selected: ${file}` : 'No file selected';
   const attacks = JSON.stringify(next.attacks);
   if (attacks !== lastAttacks) {
     lastAttacks = attacks;

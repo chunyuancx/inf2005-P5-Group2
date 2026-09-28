@@ -41,7 +41,7 @@ class ApplicationWindow:
         self.manual_start = tk.StringVar()
         self.output = tk.StringVar(value="Choose an original or stego file to begin.")
         self.verdict = tk.StringVar(value="Not verified")
-        self.test_output = tk.StringVar(value="Run the reporting demo to generate a new evidence folder.")
+        self.test_output = tk.StringVar(value="Run the attack suite to generate a new evidence folder.")
         self.test_summary = tk.StringVar(value="No test run yet")
 
     def __init__(self, root: tk.Tk, controller: ApplicationController,
