@@ -84,8 +84,22 @@ function render(next) {
       for (const value of row.values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
       $('#results').append(tr);
     }
+    filterResults();
   }
 }
+
+// Client-side filter over the rendered scenario rows; the state is untouched.
+function filterResults() {
+  const query = $('#results-filter').value.trim().toLowerCase();
+  const rows = $$('#results tr');
+  let shown = 0;
+  for (const tr of rows) { const hit = !query || tr.textContent.toLowerCase().includes(query); tr.hidden = !hit; shown += hit; }
+  $('#report-empty').hidden = rows.length > 0;
+  $('#report-legend').textContent = rows.length && query
+    ? `${shown} of ${rows.length} scenarios match "${query}". PASS means the verdict matched the one expected.`
+    : 'PASS means the verdict matched the one expected for that scenario, whatever the verdict was.';
+}
+$('#results-filter').addEventListener('input', filterResults);
 
 function describeAttack() {
   const chosen = (state?.attacks || []).find(a => a.id === $('#attack-select').value);
