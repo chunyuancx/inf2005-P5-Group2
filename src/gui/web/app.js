@@ -77,12 +77,13 @@ function render(next) {
   const results = JSON.stringify(next.results);
   if (results !== lastResults) {
     lastResults = results;
-    $('#results').replaceChildren();
-    $('#report-empty').hidden = next.results.length > 0;
+    $('#results-failed').replaceChildren(); $('#results-passed').replaceChildren();
     for (const row of next.results) {
-      const tr = document.createElement('tr'); tr.className = row.tags.includes('pass') ? 'pass' : 'fail';
-      for (const value of row.values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
-      $('#results').append(tr);
+      const passed = row.tags.includes('pass');
+      const tr = document.createElement('tr'); tr.className = passed ? 'pass' : 'fail';
+      // values: name, expected, actual, result, note. The result is implied by the box.
+      for (const value of [row.values[0], row.values[1], row.values[2], row.values[4] || '']) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
+      $(passed ? '#results-passed' : '#results-failed').append(tr);
     }
     filterResults();
   }
@@ -91,13 +92,19 @@ function render(next) {
 // Client-side filter over the rendered scenario rows; the state is untouched.
 function filterResults() {
   const query = $('#results-filter').value.trim().toLowerCase();
-  const rows = $$('#results tr');
-  let shown = 0;
-  for (const tr of rows) { const hit = !query || tr.textContent.toLowerCase().includes(query); tr.hidden = !hit; shown += hit; }
-  $('#report-empty').hidden = rows.length > 0;
-  $('#report-legend').textContent = rows.length && query
-    ? `${shown} of ${rows.length} scenarios match "${query}". PASS means the verdict matched the one expected.`
-    : 'PASS means the verdict matched the one expected for that scenario, whatever the verdict was.';
+  let shown = 0, total = 0;
+  for (const [body, empty, count] of [['#results-failed', '#failed-empty', '#failed-count'], ['#results-passed', '#passed-empty', '#passed-count']]) {
+    const rows = $$(body + ' tr');
+    let visible = 0;
+    for (const tr of rows) { const hit = !query || tr.textContent.toLowerCase().includes(query); tr.hidden = !hit; visible += hit; }
+    $(empty).hidden = rows.length > 0 && (!query || visible > 0);
+    $(empty + ' p').textContent = rows.length && query ? 'No matching scenarios.' : body.includes('failed') ? 'No failed scenarios.' : 'No passed scenarios yet.';
+    $(count).textContent = query ? `${visible} / ${rows.length}` : String(rows.length);
+    shown += visible; total += rows.length;
+  }
+  $('#report-legend').textContent = total && query
+    ? `${shown} of ${total} scenarios match "${query}".`
+    : 'A scenario fails when its verdict differs from the one expected, or the run raised an error.';
 }
 $('#results-filter').addEventListener('input', filterResults);
 

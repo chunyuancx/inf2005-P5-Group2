@@ -137,7 +137,7 @@ def exercise(browser, folder):
     for iteration in range(2):
         browser.action("run_tests")
         browser.until("!state.busy && state.test_summary.startsWith('2/2 passed')")
-        assert browser.evaluate("document.querySelectorAll('#results tr.pass').length===2 && document.querySelector('#report-empty').hidden")
+        assert browser.evaluate("document.querySelectorAll('#results-passed tr.pass').length===2 && document.querySelector('#passed-empty').hidden && document.querySelectorAll('#results-failed tr').length===0 && !document.querySelector('#failed-empty').hidden")
         assert browser.evaluate("state.verdict==='Authentic'")
         reports = list((folder / "reports").glob("run-*/results.json"))
         assert len(reports) == iteration + 1

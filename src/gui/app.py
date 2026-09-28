@@ -41,7 +41,7 @@ class ApplicationWindow:
         self.manual_start = tk.StringVar()
         self.output = tk.StringVar(value="Choose an original or stego file to begin.")
         self.verdict = tk.StringVar(value="Not verified")
-        self.test_output = tk.StringVar(value="Run the attack suite to generate a new evidence folder.")
+        self.test_output = tk.StringVar(value="You choose the evidence folder when the suite starts.")
         self.test_summary = tk.StringVar(value="No test run yet")
 
     def __init__(self, root: tk.Tk, controller: ApplicationController,
@@ -550,7 +550,7 @@ class ApplicationWindow:
             return
         self._clear_table(self.results_table)
         self.test_summary.set("Running…")
-        self.test_output.set("Protecting, attacking and verifying every scenario, then writing evidence…")
+        self.test_output.set(f"Evidence folder: {destination}\nProtecting, attacking and verifying every scenario…")
         builder = self.scenarios or self._real_scenarios
         self._submit(lambda: self.runner.run(builder(destination), destination),
                      self._show_report, self._test_error)
@@ -570,8 +570,7 @@ class ApplicationWindow:
                 row["actual"] or "Execution error", "PASS" if row["passed"] else "FAIL", row.get("note", "")),
                 tags=("pass" if row["passed"] else "fail",))
         self.test_summary.set(f"{report['passed']}/{report['total']} passed · {report['failed']} failed")
-        self.test_output.set(f"Attack suite: {report['passed']}/{report['total']} passed; {report['failed']} failed.\n"
-                             f"Evidence: {report['evidence_dir']} (results.json, results.log, results.md)")
+        self.test_output.set(f"Evidence saved to {report['evidence_dir']}\nresults.json, results.log and results.md")
 
     def _test_error(self, exc):
         self.test_summary.set("Run failed")

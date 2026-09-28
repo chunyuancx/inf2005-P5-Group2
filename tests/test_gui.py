@@ -176,9 +176,8 @@ class GuiCallbackTests(unittest.TestCase):
         cases, destination = self.window.runner.run.call_args.args
         self.assertEqual((len(cases), destination), (2, "evidence"))
         text = self.window.test_output.set.call_args.args[0]
-        self.assertIn("Attack suite: 1/2", text)
-        self.assertIn("1 failed", text)
-        self.assertIn("evidence/run-1", text)
+        self.assertIn("Evidence saved to evidence/run-1", text)
+        self.assertIn("1/2 passed", self.window.test_summary.set.call_args.args[0])
         self.window.results_table.insert.assert_called_once_with(
             "", "end", values=("exception", "Cannot Verify", "Execution error", "FAIL", ""),
             tags=("fail",))
