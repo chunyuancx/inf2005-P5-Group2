@@ -29,6 +29,17 @@ function render(next) {
   $('#activity').replaceChildren(Object.assign(document.createElement('span'), {className: 'live-dot'}),
     document.createTextNode(next.busy ? 'PROCESSING' : next.verdict === 'Not verified' ? 'STANDING BY' : 'COMPLETE'));
   $('#save-hint').textContent = next.protected ? 'Your protected media is ready to save.' : 'Protect your media to create a shareable stego file.';
+  // The session holds a passphrase the page never receives; say so after a refresh.
+  const manual = next.start_mode === 'manual';
+  for (const button of $$('[data-mode]')) button.setAttribute('aria-pressed', String(button.dataset.mode === next.start_mode));
+  $('#manual-start').hidden = !manual;
+  if (document.activeElement !== $('#manual-start')) $('#manual-start').value = next.manual_start;
+  $('#mode-hint').textContent = manual
+    ? 'Manual uses the position you type. It is not protected by the passphrase — anyone who guesses the number can read the payload.'
+    : 'Automatic derives the position from your passphrase — different for every file.';
+  $('#passphrase-hint').textContent = next.passphrase_set && !$('#passphrase').value
+    ? 'This session already holds a passphrase. Re-enter it to protect or verify.'
+    : 'Decides where the payload hides. Party B needs this same passphrase — it is never stored in the file.';
   $('#test-summary').textContent = next.test_summary;
   $('#test-output').textContent = next.test_output;
   const rows = JSON.stringify(next.statuses);
@@ -83,8 +94,19 @@ async function poll() {
   setTimeout(poll, 400);
 }
 
-$$('[data-action]').forEach(button => button.addEventListener('click', () => action(button.dataset.action)));
+// Protect and verify both need the passphrase the user typed. Send it first so
+// the value never has to be polled back into the page.
+const NEEDS_PASSPHRASE = new Set(['protect', 'verify']);
+$$('[data-action]').forEach(button => button.addEventListener('click', async () => {
+  const name = button.dataset.action;
+  if (NEEDS_PASSPHRASE.has(name)) {
+    await action('passphrase', $('#passphrase').value);
+    await action('manual_start', $('#manual-start').value);
+  }
+  await action(name);
+}));
 $$('[data-depth]').forEach(button => button.addEventListener('click', () => action('depth', button.dataset.depth)));
+$$('[data-mode]').forEach(button => button.addEventListener('click', () => action('start_mode', button.dataset.mode)));
 
 function setView(view) {
   for (const name of ['workspace', 'testing']) $('#' + name).hidden = name !== view;

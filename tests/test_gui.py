@@ -16,7 +16,8 @@ class GuiCallbackTests(unittest.TestCase):
         for name in ("root", "controller", "runner", "path", "lsb", "output", "verdict",
                      "test_output", "test_summary", "save_button", "results_table",
                      "statuses_table", "browse_button", "protect_button", "verify_button",
-                     "test_button", "lsb_box", "executor"):
+                     "test_button", "lsb_box", "passphrase_box", "mode_box",
+                     "manual_box", "executor"):
             setattr(self.window, name, Mock())
         self.window.busy = False
         self.window.protected = None

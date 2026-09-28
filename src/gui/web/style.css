@@ -90,3 +90,16 @@ h2 { margin: 0; font-weight: 480; font-size: 21px; letter-spacing: -.7px; }.mute
 @media (max-width: 760px) { .app-shell { padding: 0 18px; }.topbar { height: auto; min-height: 110px; flex-wrap: wrap; padding: 18px 0; gap: 18px; }.brand { font-size: 17px; }.brand-symbol { width: 32px; height: 36px; }.brand small { display: none; }.view-switch { order: 3; width: 100%; }.view-switch button { flex: 1; justify-content: center; }.session { margin-left: auto; }.session .icon-button { margin-left: 2px; }.intro { padding: 27px 0 23px; display: block; }h1 { letter-spacing: -1.4px; font-size: 39px; }.intro p { font-size: 11px; }.board { gap: 15px; }.app-footer { font-size: 7px; letter-spacing: .5px; }.app-footer > :nth-child(2) { display: none; }.test-board { display: flex; flex-direction: column; min-height: 0; }.report-card { min-height: 360px; }.evidence-card { min-height: 130px; }.demo-card .card-content { padding-bottom: 24px; }.studio-icon { margin: 0 0 20px; } }
 @media (max-width: 640px) { .steps-grid { grid-template-columns: minmax(0, 1fr); }.steps-grid > .glass, .steps-grid > .glass:last-child { grid-column: auto; min-height: 295px; }.steps-grid .verdict { font-size: 29px; }.preview-layout { gap: 12px; }.preview-pane { min-height: 145px; padding: 15px 8px; }.preview-pane .tiny { font-size: 9px; }.preview-description .tiny { margin-bottom: 5px; }.steps-grid .result-footer { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+.passphrase-field { display: block; margin: 0 0 9px; }
+.passphrase-field span { display: block; font-size: 10px; letter-spacing: .12em; color: var(--muted); margin-bottom: 7px; }
+.passphrase-field input { width: 100%; box-sizing: border-box; height: 36px; padding: 0 12px; border: 1px solid #c8a9e623; border-radius: 7px; background: #e6bdff06; color: #faf5ff; font-family: inherit; font-size: 13px; letter-spacing: .08em; }
+.passphrase-field input::placeholder { color: #7c7090; letter-spacing: 0; }
+.passphrase-field input:focus { outline: none; border-color: #e7c9ff88; box-shadow: 0 0 15px #c591fb2e; }
+.passphrase-field input:disabled { opacity: .5; }
+.start-mode { display: flex; gap: 5px; align-items: center; margin: 0 0 9px; }
+.start-mode button { height: 31px; padding: 0 14px; border: 1px solid #c8a9e623; border-radius: 7px; background: #e6bdff06; color: #c4afd6; font-size: 11px; font-family: inherit; }
+.start-mode button[aria-pressed="true"] { background: linear-gradient(145deg,#edc5ff,#bf9be7); border-color: #f1d6ff; color: #312041; box-shadow: 0 0 15px #c591fb2e; }
+.start-mode button:not(:disabled):hover { border-color: #e7c9ff88; }
+.start-mode input { flex: 1; min-width: 0; height: 31px; box-sizing: border-box; padding: 0 10px; border: 1px solid #c8a9e623; border-radius: 7px; background: #e6bdff06; color: #faf5ff; font-family: inherit; font-size: 12px; }
+.start-mode input:focus { outline: none; border-color: #e7c9ff88; }
+.start-mode input[hidden] { display: none; }
