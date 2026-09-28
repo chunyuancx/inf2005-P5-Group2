@@ -1,4 +1,9 @@
-# Glass desktop
+# GUI, Attack Simulation & Automated Testing — Documentation
+
+Member 6: Chun Yuan
+Files covered: `src/gui/`, `src/testing/`, `tests/gui_browser.py`
+
+## Glass desktop
 
 Run `python -m src` from the repository root. The default GUI opens in an Edge
 or Chrome app window. It uses local HTML/CSS for backdrop blur and a fixed,
@@ -26,9 +31,9 @@ On this workstation, the working Tk interpreter is MSYS2 Python. In PowerShell:
 & 'C:\msys64\ucrt64\bin\python.exe' -m src
 ```
 
-The application entry point still uses `UnconfiguredService` adapters, as it did
-before the visual redesign. Connect the team's service implementations through
-`ApplicationController` to enable real media processing.
+The application entry point wires the team's real services (image, audio,
+crypto, payload and start location) into `ApplicationController`, so Protect
+and Verify process real PNG/BMP and PCM WAV files.
 
 ## GUI regression checks
 

@@ -4,10 +4,10 @@ Runs a real file all the way through: derive start -> embed -> save to disk ->
 reload from disk -> re-derive start -> extract -> compare.  Then repeats with a
 wrong passphrase, and with a tampered stego file.
 
-    python manual_start_location_test.py
-    python manual_start_location_test.py samples/audio/original.wav
-    python manual_start_location_test.py C:/path/to/photo.png --lsb 3
-    python manual_start_location_test.py photo.png --key "my passphrase"
+    python -m tests.manual.manual_start_location_test
+    python -m tests.manual.manual_start_location_test samples/audio/original.wav
+    python -m tests.manual.manual_start_location_test C:/path/to/photo.png --lsb 3
+    python -m tests.manual.manual_start_location_test photo.png --key "my passphrase"
 
 Defaults to the sample WAV under samples/.  Pass any PNG, BMP or PCM WAV.
 Writes <name>_stego and <name>_tampered next to the file it was given.
