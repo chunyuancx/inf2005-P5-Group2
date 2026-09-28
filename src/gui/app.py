@@ -604,6 +604,9 @@ class ApplicationWindow:
             self.attack_output.set(str(exc))
             return
         self.attack_output.set(f"Applying '{attack.label}'…")
+        # Read the Tk variables here; the worker thread must not touch them.
+        where = (f"manual position {self.attack_manual_start.get().strip() or '?'}"
+                 if self.attack_start_mode.get() == "manual" else "the position derived from your passphrase")
 
         def work():
             media = self.controller.load(path)
@@ -616,13 +619,14 @@ class ApplicationWindow:
             except IntegrationError as exc:
                 if not attack.targets_payload:
                     raise
-                where = (f"manual position {self.attack_manual_start.get().strip() or '?'}"
-                         if self.attack_start_mode.get() == "manual" else "the position derived from your passphrase")
+                found = self._payload_depths(media, depth)
+                hint = (f" With these same settings a payload IS found at LSB depth {found[0]}: "
+                        f"set the lab depth to {found[0]}." if found else
+                        " Choose the saved stego copy (not the original or an already attacked copy) and "
+                        "use exactly the depth, mode and passphrase or position it was protected with.")
                 raise IntegrationError(
                     f"{exc} This attack rewrites the hidden payload, so the lab must find it first: "
-                    f"it looked at LSB depth {depth}, {where}. Choose the saved stego copy (not the "
-                    "original or an already attacked copy) and use exactly the depth, mode and "
-                    "passphrase or position it was protected with.") from exc
+                    f"it looked at LSB depth {depth}, {where}.{hint}") from exc
             source = Path(path)
             # Each source file gets its own folder under "attacks", and every
             # attacked copy is named by the date and time it was made.
@@ -646,6 +650,24 @@ class ApplicationWindow:
             self._verify_attacked(attack, target, depth)
 
         self._submit(work, done, lambda exc: self.attack_output.set(f"Attack failed: {exc}"))
+
+    def _payload_depths(self, media, skip_depth):
+        """Other LSB depths at which the studio's settings do find an envelope.
+
+        A wrong depth is the commonest reason a payload attack cannot find the
+        envelope, so the lab checks the other depths and names the right one.
+        """
+        found = []
+        for other in range(1, 9):
+            if other == skip_depth:
+                continue
+            try:
+                start = self.controller.location.recover(media, other)
+                self.controller.service_for(media).extract(media, other, start)
+                found.append(other)
+            except Exception:
+                continue
+        return found
 
     def _verify_attacked(self, attack, target, depth):
         """Verify an attacked copy with the studio's settings, as Party B would."""
