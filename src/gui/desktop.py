@@ -277,6 +277,38 @@ def make_server(desktop):
     return server, f"http://127.0.0.1:{server.server_port}/{token}/index.html"
 
 
+WINDOW_TITLE = "Media Integrity | Glass workspace"
+
+
+def _maximize_when_visible(title: str, timeout: float = 15.0) -> bool:
+    """Maximise and raise the first visible top-level window with this title (Windows only)."""
+    if os.name != "nt":
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        found = []
+
+        def collect(hwnd, _):
+            if user32.IsWindowVisible(hwnd):
+                buffer = ctypes.create_unicode_buffer(256)
+                user32.GetWindowTextW(hwnd, buffer, 256)
+                if buffer.value == title:
+                    found.append(hwnd)
+            return True
+        user32.EnumWindows(callback_type(collect), 0)
+        if found:
+            user32.ShowWindow(found[0], 3)  # SW_MAXIMIZE
+            user32.SetForegroundWindow(found[0])
+            return True
+        time.sleep(0.2)
+    return False
+
+
 def launch(root, controller, *, open_window=True):
     desktop = GlassDesktop(root, controller)
     server, url = make_server(desktop)
@@ -287,10 +319,10 @@ def launch(root, controller, *, open_window=True):
                     Path(os.environ.get("PROGRAMFILES", "")) / "Google/Chrome/Application/chrome.exe"]
         browser = next((path for path in browsers if path.is_file()), None)
         if browser:
-            # Maximised on the primary display so the whole workspace is visible
-            # without scrolling. An explicit --window-size would override
-            # --start-maximized and, on scaled displays, open a half-size window.
+            # Edge/Chrome app windows restore their last bounds and can ignore
+            # --start-maximized, so the window is also maximised once it appears.
             subprocess.Popen([str(browser), f"--app={url}", "--start-maximized"])
+            Thread(target=_maximize_when_visible, args=(WINDOW_TITLE,), daemon=True).start()
         else:
             webbrowser.open(url)
     try:
