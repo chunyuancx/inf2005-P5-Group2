@@ -48,7 +48,10 @@ show on the next refresh.
 
 ### Test studio view
 
-- **Attack lab.** Choose a file, pick an attack for its type, and click Run
+- **Attack lab.** The lab has its own file and settings, independent of the
+  workspace: its own file picker, LSB depth, passphrase or manual position,
+  and an optional hidden message that the suite embeds in every cover it
+  protects. Choose a file, pick an attack for its type, and click Run
   attack simulation. The attacked copy is saved as
   `attacks/<file name>/<date>_<time>_<attack>.<ext>` next to the source
   (never overwriting), selected, and verified immediately; the verdict is

@@ -80,8 +80,14 @@
 
     <main id="testing" class="board test-board" hidden aria-label="Test studio">
       <section class="glass demo-card"><header class="card-heading"><span>ATTACK LAB</span></header><div class="card-content">
-        <h2>Break it on purpose.</h2><p class="muted">Pick a file and an attack, or run every attack as the full simulation suite. Attacked copies are saved next to the file and verified straight away.</p>
-        <button class="file-picker attack-picker" data-action="choose" data-control="browse_button"><span class="file-orb"><svg><use href="#upload"/></svg></span><span class="file-copy"><strong id="attack-filename">Choose a media file</strong><small id="attack-filedetail">PNG, BMP or WAV on this device</small></span><span class="round-arrow"><svg><use href="#arrow"/></svg></span></button>
+        <h2>Break it on purpose.</h2><p class="muted">The lab has its own file and settings. Pick a stego file, enter what it was protected with, choose an attack, or run every attack as the full simulation suite.</p>
+        <button class="file-picker attack-picker" data-action="choose_attack" data-control="attack_browse_button"><span class="file-orb"><svg><use href="#upload"/></svg></span><span class="file-copy"><strong id="attack-filename">Choose a media file</strong><small id="attack-filedetail">PNG, BMP or WAV on this device</small></span><span class="round-arrow"><svg><use href="#arrow"/></svg></span></button>
+        <div class="lab-settings">
+          <label class="lab-field" for="attack-lsb"><span>LSB DEPTH</span><select id="attack-lsb" data-control="attack_lsb_box"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label>
+          <label class="lab-field grow" for="attack-passphrase"><span>PASSPHRASE</span><input type="password" id="attack-passphrase" data-control="attack_passphrase_box" autocomplete="off" spellcheck="false" placeholder="Passphrase the file was protected with"></label>
+        </div>
+        <div class="start-mode" role="group" aria-label="Attack lab start location mode"><button data-attack-mode="auto" data-control="attack_mode_box" aria-pressed="true">Automatic</button><button data-attack-mode="manual" data-control="attack_mode_box" aria-pressed="false">Manual</button><input type="number" id="attack-manual-start" data-control="attack_manual_box" min="1" step="1" placeholder="Position" aria-label="Attack lab manual start position" hidden></div>
+        <label class="payload-field" for="attack-message"><span>HIDDEN MESSAGE FOR THE SUITE</span><textarea id="attack-message" data-control="attack_message_box" rows="2" maxlength="4096" spellcheck="false" placeholder="Embedded in every cover the suite protects (optional)"></textarea></label>
         <label class="attack-field" for="attack-select"><span>ATTACK</span><select id="attack-select" data-control="attack_box"><option value="__suite__">Every attack (full simulation suite)</option></select></label>
         <p class="tiny muted" id="attack-description"></p>
         <button class="primary-button" data-action="attack" data-control="attack_button"><svg><use href="#flask"/></svg>Run attack simulation</button>

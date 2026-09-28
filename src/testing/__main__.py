@@ -20,6 +20,7 @@ def main(argv=None):
     parser.add_argument("--lsb", action="append", type=int, help="LSB depth to test (repeatable, default 1)")
     parser.add_argument("--mode", choices=("manual", "auto", "both"), default="both",
                         help="start-location mode(s) to cover")
+    parser.add_argument("--message", default=None, help="hidden message to embed in every protected cover")
     parser.add_argument("--demo", action="store_true", help="run the canned reporting demo instead of real attacks")
     args = parser.parse_args(argv)
     if args.demo:
@@ -27,7 +28,8 @@ def main(argv=None):
     else:
         modes = ("manual", "auto") if args.mode == "both" else (args.mode,)
         scenarios = build_real_scenarios(args.output_dir, covers=args.cover or DEFAULT_COVERS,
-                                         lsbs=tuple(args.lsb or (1,)), modes=modes)
+                                         lsbs=tuple(args.lsb or (1,)), modes=modes,
+                                         **({"message": args.message} if args.message else {}))
     report = AutomatedTestRunner().run(scenarios, args.output_dir)
     for row in report["results"]:
         if not row["passed"]:

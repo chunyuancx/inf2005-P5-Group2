@@ -55,8 +55,9 @@ EXPECTED = {
 class Bench:
     """Builds controllers that share one work folder and one signing key pair."""
 
-    def __init__(self, work_dir: Path):
+    def __init__(self, work_dir: Path, message: str = MESSAGE):
         self.work_dir = Path(work_dir)
+        self.message = message
         self.keys = self.work_dir / "keys"
         self.other_keys = self.work_dir / "keys-other"
         self.files = self.work_dir / "files"
@@ -81,7 +82,7 @@ class Bench:
 
     def protect(self, controller: ApplicationController, cover: Path, lsb: int, label: str) -> Path:
         stego = self.path(label, cover.suffix)
-        controller.save(controller.protect(str(cover), lsb, MESSAGE), str(stego))
+        controller.save(controller.protect(str(cover), lsb, self.message), str(stego))
         return stego
 
     @staticmethod
@@ -134,7 +135,7 @@ def attack_scenarios(bench: Bench, cover: Path, lsb: int, mode: str) -> list[Sce
 
     # The clean case must also give back the hidden message it was protected with.
     cases.append(Scenario(f"{kind}/{mode}/lsb{lsb}/clean", Verdict.AUTHENTIC, run_attack("clean"),
-                          kind, lsb, mode=mode, attack="none", expected_payload=MESSAGE))
+                          kind, lsb, mode=mode, attack="none", expected_payload=bench.message))
     for attack in ATTACKS.values():
         if media_kind not in attack.kinds:
             continue
@@ -208,13 +209,13 @@ def verifier_scenarios(bench: Bench, cover: Path, lsb: int, clean: bool = True) 
 
 
 def build_real_scenarios(work_dir, covers=DEFAULT_COVERS, lsbs=(1,), modes=("manual", "auto"),
-                         clean_covers=None) -> list[Scenario]:
+                         clean_covers=None, message=MESSAGE) -> list[Scenario]:
     """The full suite: every attack and verifier case for each cover, depth and mode.
 
     ``clean_covers`` lists the covers known to be unprotected originals; it
     defaults to all of ``covers``.
     """
-    bench = Bench(Path(work_dir) / "attack-suite-work")
+    bench = Bench(Path(work_dir) / "attack-suite-work", message=message)
     clean = {Path(c).resolve() for c in (covers if clean_covers is None else clean_covers)}
     cases = []
     for cover in covers:

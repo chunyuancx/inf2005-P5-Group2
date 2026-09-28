@@ -3,6 +3,7 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 let state = null, requestPending = false, lastRows = '', lastResults = '', closing = false;
 let toastTimer, lastPreview = '', manualDirty = false, lastAttacks = '', payloadDirty = false;
+const labDirty = {manual: false, message: false};
 
 function notify(message) {
   $('#toast').textContent = message;
@@ -51,9 +52,17 @@ function render(next) {
   $('#test-output').textContent = next.test_output;
   $('#attack-output').textContent = next.attack_output; $('#attack-output').hidden = !next.attack_output;
   $('#test-output').hidden = !next.test_output;
-  $('#attack-filename').textContent = file || 'Choose a media file';
-  $('#attack-filename').title = next.path;
-  $('#attack-filedetail').textContent = file ? 'Selected and ready on this device' : 'PNG, BMP or WAV on this device';
+  const labFile = (next.attack_path || '').split(/[\\/]/).pop();
+  $('#attack-filename').textContent = labFile || 'Choose a media file';
+  $('#attack-filename').title = next.attack_path || '';
+  $('#attack-filedetail').textContent = labFile ? 'Selected for the attack lab' : 'PNG, BMP or WAV on this device';
+  if (document.activeElement !== $('#attack-lsb')) $('#attack-lsb').value = next.attack_lsb;
+  const labManual = next.attack_start_mode === 'manual';
+  for (const button of $$('[data-attack-mode]')) button.setAttribute('aria-pressed', String(button.dataset.attackMode === next.attack_start_mode));
+  $('#attack-manual-start').hidden = !labManual;
+  if (!labDirty.manual && document.activeElement !== $('#attack-manual-start')) $('#attack-manual-start').value = next.attack_manual_start;
+  if (!labDirty.message && document.activeElement !== $('#attack-message')) $('#attack-message').value = next.attack_message || '';
+  $('#attack-passphrase').placeholder = next.attack_passphrase_set && !$('#attack-passphrase').value ? 'Passphrase held for this session; re-enter to change' : 'Passphrase the file was protected with';
   const attacks = JSON.stringify(next.attacks);
   if (attacks !== lastAttacks) {
     lastAttacks = attacks;
@@ -212,7 +221,11 @@ async function poll() {
 
 // Protect and verify both need the passphrase the user typed. Send it first so
 // the value never has to be polled back into the page.
-const NEEDS_PASSPHRASE = new Set(['protect', 'verify', 'attack']);
+const NEEDS_PASSPHRASE = new Set(['protect', 'verify']);
+$('#attack-manual-start').addEventListener('input', () => { labDirty.manual = true; });
+$('#attack-message').addEventListener('input', () => { labDirty.message = true; });
+$('#attack-lsb').addEventListener('change', () => action('attack_lsb', $('#attack-lsb').value));
+$$('[data-attack-mode]').forEach(button => button.addEventListener('click', () => action('attack_start_mode', button.dataset.attackMode)));
 const NEEDS_PAYLOAD = new Set(['protect']);
 $('#manual-start').addEventListener('input', () => { manualDirty = true; });
 $('#payload').addEventListener('input', () => { payloadDirty = true; });
@@ -226,7 +239,15 @@ $$('[data-action]').forEach(button => button.addEventListener('click', async () 
     manualDirty = false;
   }
   if (NEEDS_PAYLOAD.has(name)) { await action('payload', $('#payload').value); payloadDirty = false; }
-  if (name === 'attack' && $('#attack-select').value === SUITE) { await action('run_tests'); return; }
+  if (name === 'attack') {
+    // The lab's own settings travel first, read before any request re-renders the page.
+    const passphrase = $('#attack-passphrase').value, manualStart = $('#attack-manual-start').value, message = $('#attack-message').value;
+    await action('attack_passphrase', passphrase);
+    await action('attack_manual_start', manualStart);
+    await action('attack_message', message);
+    labDirty.manual = labDirty.message = false;
+    if ($('#attack-select').value === SUITE) { await action('run_tests'); return; }
+  }
   await action(name, name === 'attack' ? $('#attack-select').value : undefined);
 }));
 $$('[data-depth]').forEach(button => button.addEventListener('click', () => action('depth', button.dataset.depth)));

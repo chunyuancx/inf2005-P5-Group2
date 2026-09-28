@@ -52,7 +52,8 @@ class TableState:
 class GlassDesktop(ApplicationWindow):
     controls = ("browse_button", "protect_button", "verify_button", "save_button",
                 "test_button", "lsb_box", "passphrase_box", "payload_box", "mode_box", "manual_box",
-                "attack_button", "attack_box")
+                "attack_button", "attack_box", "attack_browse_button", "attack_lsb_box",
+                "attack_passphrase_box", "attack_mode_box", "attack_manual_box", "attack_message_box")
 
     def __init__(self, root, controller, runner=None, scenarios=None):
         self._initialize_state(root, controller, runner, scenarios)
@@ -61,6 +62,7 @@ class GlassDesktop(ApplicationWindow):
             setattr(self, name, ControlState())
         self.save_button.configure(state="disabled")
         self.lsb_box.configure(state="readonly")
+        self.attack_lsb_box.configure(state="readonly")
         self.statuses_table, self.results_table = TableState(), TableState()
         self.path.trace_add("write", self.invalidate)
         self.lsb.trace_add("write", self.invalidate)
@@ -85,8 +87,13 @@ class GlassDesktop(ApplicationWindow):
             "decoded_payload": self.decoded_payload.get(),
             "test_output": self.test_output.get(), "test_summary": self.test_summary.get(),
             "attack_output": self.attack_output.get(),
-            # Only the attacks that apply to the selected file's type; none until a file is chosen.
-            "attacks": describe(MediaType(self.media_kind())) if self.media_kind() else [],
+            "attack_path": self.attack_path.get(), "attack_lsb": self.attack_lsb.get(),
+            "attack_passphrase_set": bool(self.attack_passphrase.get()),
+            "attack_start_mode": self.attack_start_mode.get(),
+            "attack_manual_start": self.attack_manual_start.get(),
+            "attack_message": self.attack_message.get(),
+            # Only the attacks that apply to the studio file's type; none until a file is chosen.
+            "attacks": describe(MediaType(self.attack_kind())) if self.attack_kind() else [],
             "protected": self.protected is not None,
             "save_ready": self.protected is not None and self.verified_protected,
             "media_kind": self.media_kind(),
@@ -103,6 +110,10 @@ class GlassDesktop(ApplicationWindow):
         if suffix == ".wav":
             return "audio"
         return None
+
+    def attack_kind(self):
+        suffix = Path(self.attack_path.get()).suffix.lower()
+        return "image" if suffix in {".png", ".bmp"} else "audio" if suffix == ".wav" else None
 
     def preview_sources(self):
         """Selected path and protected buffer for the preview endpoints.
@@ -152,7 +163,20 @@ class GlassDesktop(ApplicationWindow):
             if payload.get("value") not in ATTACKS:
                 raise ValueError("Choose an attack from the list.")
             self.attack(payload["value"])
-        elif name in {"choose", "protect", "verify", "save", "run_tests"}:
+        elif name in {"attack_passphrase", "attack_manual_start", "attack_message"}:
+            value = payload.get("value")
+            if value is not None and not isinstance(value, str):
+                raise ValueError("Value must be text.")
+            getattr(self, name).set(value or "")
+        elif name == "attack_start_mode":
+            if payload.get("value") not in {"auto", "manual"}:
+                raise ValueError("Start mode must be automatic or manual.")
+            self.attack_start_mode.set(payload["value"])
+        elif name == "attack_lsb":
+            if str(payload.get("value")) not in {str(i) for i in range(1, 9)}:
+                raise ValueError("Choose an LSB depth from 1 to 8.")
+            self.attack_lsb.set(str(payload["value"]))
+        elif name in {"choose", "choose_attack", "protect", "verify", "save", "run_tests"}:
             getattr(self, name)()
         else:
             raise ValueError("Unknown action")
