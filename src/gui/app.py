@@ -641,10 +641,16 @@ class ApplicationWindow:
                 if not attack.targets_payload:
                     raise
                 found = self._payload_depths(media, depth)
-                hint = (f" With these same settings a payload IS found at LSB depth {found[0]}: "
-                        f"set the lab depth to {found[0]}." if found else
-                        " Choose the saved stego copy (not the original or an already attacked copy) and "
-                        "use exactly the depth, mode and passphrase or position it was protected with.")
+                positions = [] if found else self._envelope_positions(media, depth)
+                if found:
+                    hint = (f" With these same settings a payload IS found at LSB depth {found[0]}: "
+                            f"set the lab depth to {found[0]}.")
+                elif positions:
+                    hint = (f" At LSB depth {depth} a payload sits at position {positions[0]:,}: "
+                            f"set the lab to Manual with position {positions[0]:,}.")
+                else:
+                    hint = (" Choose the saved stego copy (not the original or an already attacked copy) and "
+                            "use exactly the depth, mode and passphrase or position it was protected with.")
                 raise IntegrationError(
                     f"{exc} This attack rewrites the hidden payload, so the lab must find it first: "
                     f"it looked at LSB depth {depth}, {where}.{hint}") from exc
@@ -697,6 +703,15 @@ class ApplicationWindow:
                 continue
         return found
 
+    @staticmethod
+    def _envelope_positions(media, depth):
+        """Where envelopes really sit at this depth, for the lab's hints (worker thread)."""
+        try:
+            from src.gui.diagnostics import find_envelopes
+            return [start for start, _ in find_envelopes(media, depth)]
+        except Exception:
+            return []
+
     def _verify_attacked(self, attack, target, depth):
         """Verify an attacked copy with the studio's settings, as Party B would."""
         label = attack.label
@@ -713,17 +728,31 @@ class ApplicationWindow:
             return
         self.attack_verdict.set("Verifying…")
         self.attack_result.set("Checking the attacked copy the way Party B would.")
+        manual = self.attack_start_mode.get() == "manual"
+        typed = self.attack_manual_start.get().strip()
 
-        def show(result):
-            self.attack_verdict.set(result.verdict.value)
-            message = result.message
-            if (result.verdict is Verdict.PAYLOAD_MISSING and not attack.targets_payload
-                    and self.attack_start_mode.get() == "auto"):
-                message += (" Why not Tampered: in Automatic mode the start position is derived from the "
+        def work():
+            result = self.controller.verify(str(target), depth)
+            hint = ""
+            if result.verdict is Verdict.PAYLOAD_MISSING and not attack.targets_payload:
+                if manual:
+                    # A media-level attack leaves the payload where it was, so a missing
+                    # payload in manual mode almost always means a wrong position.
+                    positions = self._envelope_positions(self.controller.load(str(target)), depth)
+                    if positions and str(positions[0]) != typed:
+                        hint = (f" The payload actually sits at position {positions[0]:,}, not {typed or '?'}: "
+                                f"set the lab position to {positions[0]:,} and run the attack again.")
+                else:
+                    hint = (" Why not Tampered: in Automatic mode the start position is derived from the "
                             "file content, so any edit moves it and the payload cannot be found "
                             "(verification docs, section 7). Use Manual with the position the file was "
                             "protected at to see Tampered.")
-            self.attack_result.set(message)
+            return result, hint
+
+        def show(outcome):
+            result, hint = outcome
+            self.attack_verdict.set(result.verdict.value)
+            self.attack_result.set(result.message + hint)
             self.attack_decoded.set(getattr(result, "decoded_payload", None) or "")
             self._clear_table(self.attack_statuses_table)
             for stage, status in result.statuses.items():
@@ -731,7 +760,7 @@ class ApplicationWindow:
             self.attack_output.set(f"{label}: {result.verdict.value}.")
 
         finish = self._watch_stages(self.attack_statuses_table)
-        self._submit(lambda: self.controller.verify(str(target), depth), finish(show), finish(cannot))
+        self._submit(work, finish(show), finish(cannot))
 
     def run_tests(self):
         if self.busy:
