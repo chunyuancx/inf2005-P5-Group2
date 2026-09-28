@@ -37,15 +37,15 @@ jobs:
       - name: Run automated tests
         run: python -m pytest -v
 
-      - name: Generate runner demo evidence
+      - name: Generate attack-suite evidence
         if: ${{ !cancelled() }}
         run: python -m src.testing --output-dir test-evidence
 
-      - name: Upload runner demo evidence
+      - name: Upload attack-suite evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4.6.2
         with:
-          name: runner-demo-evidence
+          name: attack-suite-evidence
           path: test-evidence/
           if-no-files-found: warn
           retention-days: 14

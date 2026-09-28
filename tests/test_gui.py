@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 from src.exceptions import IntegrationError
 from src.gui.app import ApplicationWindow
+from src.testing.demo_scenarios import build_demo_scenarios
 from src.models import Media, MediaType, Verdict, VerificationResult
 
 
@@ -17,8 +18,10 @@ class GuiCallbackTests(unittest.TestCase):
                      "test_output", "test_summary", "save_button", "results_table",
                      "statuses_table", "browse_button", "protect_button", "verify_button",
                      "test_button", "lsb_box", "passphrase_box", "mode_box",
-                     "manual_box", "executor"):
+                     "manual_box", "executor", "attack_button", "attack_box",
+                     "attack_output", "attack_choice"):
             setattr(self.window, name, Mock())
+        self.window.scenarios = lambda folder: build_demo_scenarios()
         self.window.busy = False
         self.window.protected = None
         self.window.results_table.get_children.return_value = ()
@@ -173,11 +176,11 @@ class GuiCallbackTests(unittest.TestCase):
         cases, destination = self.window.runner.run.call_args.args
         self.assertEqual((len(cases), destination), (2, "evidence"))
         text = self.window.test_output.set.call_args.args[0]
-        self.assertIn("Runner demo: 1/2", text)
+        self.assertIn("Attack suite: 1/2", text)
         self.assertIn("1 failed", text)
         self.assertIn("evidence/run-1", text)
         self.window.results_table.insert.assert_called_once_with(
-            "", "end", values=("exception", "Cannot Verify", "Execution error", "FAIL"),
+            "", "end", values=("exception", "Cannot Verify", "Execution error", "FAIL", ""),
             tags=("fail",))
         self.window.output.set.assert_not_called()
         self.window.verdict.set.assert_not_called()

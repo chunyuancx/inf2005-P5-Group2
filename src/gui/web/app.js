@@ -2,7 +2,7 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 let state = null, requestPending = false, lastRows = '', lastResults = '', closing = false;
-let toastTimer, lastPreview = '', manualDirty = false;
+let toastTimer, lastPreview = '', manualDirty = false, lastAttacks = '';
 
 function notify(message) {
   $('#toast').textContent = message;
@@ -47,6 +47,15 @@ function render(next) {
     : 'Decides where the payload hides. Party B needs this same passphrase. It is never stored in the file.';
   $('#test-summary').textContent = next.test_summary;
   $('#test-output').textContent = next.test_output;
+  $('#attack-output').textContent = next.attack_output;
+  const attacks = JSON.stringify(next.attacks);
+  if (attacks !== lastAttacks) {
+    lastAttacks = attacks;
+    const select = $('#attack-select'), current = select.value;
+    select.replaceChildren(...next.attacks.map(a => Object.assign(document.createElement('option'), {value: a.id, textContent: a.label})));
+    if (next.attacks.some(a => a.id === current)) select.value = current;
+    describeAttack();
+  }
   const rows = JSON.stringify(next.statuses);
   if (rows !== lastRows) {
     lastRows = rows;
@@ -76,6 +85,13 @@ function render(next) {
     }
   }
 }
+
+function describeAttack() {
+  const chosen = (state?.attacks || []).find(a => a.id === $('#attack-select').value);
+  $('#attack-description').textContent = chosen ? chosen.description + (chosen.targets_payload ? ' Needs the same depth and start location as the protected file.' : '')
+    : state?.media_kind ? 'Choose an attack.' : 'Choose a file in the workspace to see the attacks for its type.';
+}
+$('#attack-select').addEventListener('change', describeAttack);
 
 // Preview panes load media through the session's own endpoints; the page
 // never receives file bytes through the polled state.
@@ -164,7 +180,7 @@ async function poll() {
 
 // Protect and verify both need the passphrase the user typed. Send it first so
 // the value never has to be polled back into the page.
-const NEEDS_PASSPHRASE = new Set(['protect', 'verify']);
+const NEEDS_PASSPHRASE = new Set(['protect', 'verify', 'attack']);
 $('#manual-start').addEventListener('input', () => { manualDirty = true; });
 $$('[data-action]').forEach(button => button.addEventListener('click', async () => {
   const name = button.dataset.action;
@@ -175,7 +191,7 @@ $$('[data-action]').forEach(button => button.addEventListener('click', async () 
     await action('manual_start', manualStart);
     manualDirty = false;
   }
-  await action(name);
+  await action(name, name === 'attack' ? $('#attack-select').value : undefined);
 }));
 $$('[data-depth]').forEach(button => button.addEventListener('click', () => action('depth', button.dataset.depth)));
 $$('[data-mode]').forEach(button => button.addEventListener('click', () => action('start_mode', button.dataset.mode)));

@@ -15,8 +15,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 import webbrowser
 
+from src.attacks import ATTACKS, describe
 from src.gui.app import ApplicationWindow
 from src.gui.preview import audio_difference, image_difference
+from src.models import MediaType
 
 MEDIA_TYPES = {".png": "image/png", ".bmp": "image/bmp", ".wav": "audio/wav"}
 
@@ -49,10 +51,11 @@ class TableState:
 
 class GlassDesktop(ApplicationWindow):
     controls = ("browse_button", "protect_button", "verify_button", "save_button",
-                "test_button", "lsb_box", "passphrase_box", "mode_box", "manual_box")
+                "test_button", "lsb_box", "passphrase_box", "mode_box", "manual_box",
+                "attack_button", "attack_box")
 
-    def __init__(self, root, controller, runner=None):
-        self._initialize_state(root, controller, runner)
+    def __init__(self, root, controller, runner=None, scenarios=None):
+        self._initialize_state(root, controller, runner, scenarios)
         root.withdraw()
         for name in self.controls:
             setattr(self, name, ControlState())
@@ -78,6 +81,8 @@ class GlassDesktop(ApplicationWindow):
             "manual_start": self.manual_start.get(),
             "output": self.output.get(), "verdict": self.verdict.get(),
             "test_output": self.test_output.get(), "test_summary": self.test_summary.get(),
+            "attack_output": self.attack_output.get(),
+            "attacks": describe(MediaType(self.media_kind()) if self.media_kind() else None),
             "protected": self.protected is not None,
             "save_ready": self.protected is not None and self.verified_protected,
             "media_kind": self.media_kind(),
@@ -134,6 +139,10 @@ class GlassDesktop(ApplicationWindow):
             if str(depth) not in {str(i) for i in range(1, 9)}:
                 raise ValueError("Choose an LSB depth from 1 to 8.")
             self.lsb.set(str(depth))
+        elif name == "attack":
+            if payload.get("value") not in ATTACKS:
+                raise ValueError("Choose an attack from the list.")
+            self.attack(payload["value"])
         elif name in {"choose", "protect", "verify", "save", "run_tests"}:
             getattr(self, name)()
         else:

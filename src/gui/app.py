@@ -4,10 +4,11 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from src.controllers import ApplicationController
+from src.attacks import ATTACKS, AttackContext, apply_attack, attacks_for
 from src.exceptions import IntegrationError
-from src.models import Verdict
-from src.testing.demo_scenarios import build_demo_scenarios
+from src.models import MediaType, Verdict
 from src.testing.runner import AutomatedTestRunner
+from src.testing.scenarios import DEFAULT_COVERS, build_real_scenarios
 from src.gui.theme import ACCENT, BACKDROP, INSET, MUTED, PANEL, TEXT, CosmicHeader, GlassCard
 
 
@@ -15,13 +16,18 @@ class ApplicationWindow:
     # Class-level defaults so partially constructed windows (tests) still work.
     preview_version = 0      # bumped whenever the preview panes must reload
     verified_protected = False  # the protected copy passed its self-check; saving allowed
+    scenarios = None         # callable(folder) -> scenarios for the test studio; real suite by default
+    _attack_pending = None   # (label, attacked path) while an attacked copy is being verified
     _progress = None         # (stages, current index) while verification runs
     _progress_dirty = False  # set from the worker thread, drained by the poll loop
 
-    def _initialize_state(self, root, controller, runner=None):
+    def _initialize_state(self, root, controller, runner=None, scenarios=None):
         """Shared workflow state for the native and glass desktop views."""
         self.root, self.controller = root, controller
         self.runner = runner or AutomatedTestRunner()
+        self.scenarios = scenarios
+        self.attack_choice = tk.StringVar()
+        self.attack_output = tk.StringVar(value="Choose a stego file in the workspace, then an attack.")
         self.protected = None
         self.busy = False
         self._drag_offset = None
@@ -39,8 +45,8 @@ class ApplicationWindow:
         self.test_summary = tk.StringVar(value="No test run yet")
 
     def __init__(self, root: tk.Tk, controller: ApplicationController,
-                 runner: AutomatedTestRunner | None = None):
-        self._initialize_state(root, controller, runner)
+                 runner: AutomatedTestRunner | None = None, scenarios=None):
+        self._initialize_state(root, controller, runner, scenarios)
         root.title("Media Integrity | Protect & Verify")
         root.geometry("1140x940")
         root.minsize(940, 860)
@@ -156,15 +162,25 @@ class ApplicationWindow:
         self.statuses_table = self._table(result, (("stage", "Verification stage", 240), ("status", "Status", 540)), height=4)
 
     def _build_testing(self, parent):
-        ttk.Label(parent, text="Automated test runner", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(parent, text="REPORTING DEMO  /  Canned results  /  No media processing", style="Muted.TLabel").pack(anchor="w", pady=(6, 12))
-        ttk.Label(parent, text="Demonstrate expected-versus-actual reporting using two canned results.\nThis does not run integration tests or verify the selected file.", justify="left").pack(anchor="w", pady=(0, 14))
+        ttk.Label(parent, text="Attack lab", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(parent, text="Apply an attack to the selected stego file. The attacked copy is saved next to it and verified.",
+                  style="Muted.TLabel").pack(anchor="w", pady=(6, 10))
+        lab = ttk.Frame(parent)
+        lab.pack(fill="x", pady=(0, 6))
+        self.attack_box = ttk.Combobox(lab, textvariable=self.attack_choice, state="readonly", width=34,
+                                       values=[attack.label for attack in ATTACKS.values()])
+        self.attack_box.pack(side="left")
+        self.attack_button = ttk.Button(lab, text="Attack selected file", command=self.attack)
+        self.attack_button.pack(side="left", padx=(8, 0))
+        ttk.Label(parent, textvariable=self.attack_output, wraplength=820, justify="left").pack(anchor="w", pady=(0, 14))
+        ttk.Label(parent, text="Automated attack suite", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(parent, text="Protects the bundled samples and your selected file, runs every attack and verifier case\nin both start modes, and writes JSON, log and Markdown evidence.", justify="left").pack(anchor="w", pady=(6, 10))
         toolbar = ttk.Frame(parent)
         toolbar.pack(fill="x", pady=(0, 14))
-        self.test_button = ttk.Button(toolbar, text="Run reporting demo…", style="Primary.TButton", command=self.run_tests)
+        self.test_button = ttk.Button(toolbar, text="Run attack suite…", style="Primary.TButton", command=self.run_tests)
         self.test_button.pack(side="left")
         ttk.Label(toolbar, textvariable=self.test_summary, style="Heading.TLabel").pack(side="left", padx=18)
-        self.results_table = self._table(parent, (("case", "Scenario", 330), ("expected", "Expected", 150), ("actual", "Actual", 150), ("result", "Result", 70)), height=9)
+        self.results_table = self._table(parent, (("case", "Scenario", 300), ("expected", "Expected", 130), ("actual", "Actual", 130), ("result", "Result", 60), ("note", "Note", 320)), height=9)
         self.results_table.tag_configure("pass", foreground="#8fe0c3")
         self.results_table.tag_configure("fail", foreground="#ff9aaf")
         self.statuses_table.tag_configure("done", foreground="#8fe0c3")
@@ -301,8 +317,9 @@ class ApplicationWindow:
 
     def _set_busy(self, busy):
         self.busy = busy
-        for button in (self.browse_button, self.protect_button, self.verify_button, self.test_button):
+        for button in (self.browse_button, self.protect_button, self.verify_button, self.test_button, self.attack_button):
             button.configure(state="disabled" if busy else "normal")
+        self.attack_box.configure(state="disabled" if busy else "readonly")
         self.lsb_box.configure(state="disabled" if busy else "readonly")
         for box in (self.passphrase_box, self.manual_box, self.mode_box):
             box.configure(state="disabled" if busy else "normal")
@@ -438,6 +455,7 @@ class ApplicationWindow:
         self.verdict.set("Cannot Verify")
         self.output.set(str(exc))
         self._clear_table(self.statuses_table)
+        self._report_attack("Cannot Verify", str(exc))
 
     def show_result(self, result):
         self.verdict.set(result.verdict.value)
@@ -445,6 +463,58 @@ class ApplicationWindow:
         self._clear_table(self.statuses_table)
         for stage, status in result.statuses.items():
             self.statuses_table.insert("", "end", values=(stage.capitalize(), status))
+        self._report_attack(result.verdict.value, result.message)
+
+    def _report_attack(self, verdict, message):
+        if self._attack_pending is None:
+            return
+        label, target = self._attack_pending
+        self._attack_pending = None
+        self.attack_output.set(f"{label}: {verdict}. {message}\nAttacked copy: {target}")
+
+    # ------------------------------------------------------------- attack lab
+
+    def attack(self, attack_id=None):
+        """Attack the selected file, save the copy beside it and verify it."""
+        if self.busy:
+            return
+        if attack_id is None:
+            attack_id = next((a.id for a in ATTACKS.values() if a.label == self.attack_choice.get()), None)
+        attack = ATTACKS.get(attack_id)
+        if attack is None:
+            self.attack_output.set("Choose an attack first.")
+            return
+        try:
+            path, depth = self._inputs()
+        except IntegrationError as exc:
+            self.attack_output.set(str(exc))
+            return
+        self._attack_pending = None
+        self.attack_output.set(f"Applying '{attack.label}'…")
+
+        def work():
+            media = self.controller.load(path)
+            context = AttackContext(lsb=depth, seed=depth)
+            if attack.targets_payload:
+                context = AttackContext(lsb=depth, start=self.controller.location.recover(media, depth),
+                                        service=self.controller.service_for(media), seed=depth)
+            attacked = apply_attack(attack.id, media, context)
+            source = Path(path)
+            target = source.with_name(f"{source.stem}_{attack.id}{attacked.suffix}")
+            counter = 1
+            while target.exists():
+                counter += 1
+                target = source.with_name(f"{source.stem}_{attack.id}-{counter}{attacked.suffix}")
+            self.controller.save(attacked, str(target))
+            return target
+
+        def done(target):
+            self._attack_pending = (attack.label, target)
+            self.attack_output.set(f"Saved attacked copy: {target}\nVerifying it…")
+            self.path.set(str(target))
+            self.verify()
+
+        self._submit(work, done, lambda exc: self.attack_output.set(f"Attack failed: {exc}"))
 
     def run_tests(self):
         if self.busy:
@@ -454,21 +524,32 @@ class ApplicationWindow:
             return
         self._clear_table(self.results_table)
         self.test_summary.set("Running…")
-        self.test_output.set("Processing canned results and writing evidence…")
-        self._submit(lambda: self.runner.run(build_demo_scenarios(), destination),
+        self.test_output.set("Protecting, attacking and verifying every scenario, then writing evidence…")
+        builder = self.scenarios or self._real_scenarios
+        self._submit(lambda: self.runner.run(builder(destination), destination),
                      self._show_report, self._test_error)
+
+    def _real_scenarios(self, folder):
+        covers = list(DEFAULT_COVERS)
+        selected = self.path.get()
+        if selected and Path(selected).suffix.lower() in {".png", ".bmp", ".wav"} and Path(selected).is_file():
+            covers.append(Path(selected))
+        # The selected file may itself be a stego file, so only the bundled
+        # samples are treated as known-clean covers.
+        return build_real_scenarios(folder, covers=covers, clean_covers=DEFAULT_COVERS)
 
     def _show_report(self, report):
         for row in report["results"]:
             self.results_table.insert("", "end", values=(row["name"], row["expected"],
-                row["actual"] or "Execution error", "PASS" if row["passed"] else "FAIL"),
+                row["actual"] or "Execution error", "PASS" if row["passed"] else "FAIL", row.get("note", "")),
                 tags=("pass" if row["passed"] else "fail",))
         self.test_summary.set(f"{report['passed']}/{report['total']} passed · {report['failed']} failed")
-        self.test_output.set(f"Runner demo: {report['passed']}/{report['total']} passed; {report['failed']} failed.\nEvidence: {report['evidence_dir']}")
+        self.test_output.set(f"Attack suite: {report['passed']}/{report['total']} passed; {report['failed']} failed.\n"
+                             f"Evidence: {report['evidence_dir']} (results.json, results.log, results.md)")
 
     def _test_error(self, exc):
         self.test_summary.set("Run failed")
-        self.test_output.set(f"Cannot complete reporting demo: {exc}")
+        self.test_output.set(f"Cannot complete the attack suite: {exc}")
 
     def save(self):
         if self.busy or self.protected is None:
