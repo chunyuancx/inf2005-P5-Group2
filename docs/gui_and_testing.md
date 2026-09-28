@@ -162,10 +162,29 @@ For every cover (bundled `lambda-icon.png` and `original.wav`, plus any
 | `unsupported_format` | manual | verifies a copy renamed to .jpg | Cannot Verify |
 
 With the two bundled covers at depth 1 this is 62 scenarios; with a third
-cover it is about 94 to 100. Each row records the expected verdict, the actual
-verdict, the decoded message where one was expected, and a note. The
-`unprotected_cover` case is skipped for a studio file, which may itself be a
-stego file.
+cover it is about 94 to 100. The `unprotected_cover` case is skipped for a
+studio file, which may itself be a stego file.
+
+### Reading a scenario name
+
+Every scenario is named `<cover>/<media>/<mode>/lsb<depth>/<case>`, for
+example `lambda-icon/image/manual/lsb1/region_edit` or
+`original/audio/auto/lsb1/verifier/wrong_passphrase`:
+
+| Part | Meaning |
+|---|---|
+| `cover` | the file that was protected, by name without extension |
+| `media` | `image` or `audio` |
+| `mode` | `manual` (position 100) or `auto` (passphrase-derived start) |
+| `lsb<depth>` | the LSB depth used to protect and verify |
+| `case` | `clean`, an attack id from section 3, or `verifier/<case>` from the table above |
+
+Each row records the expected verdict, the actual verdict, and a note. The
+`clean` rows' note shows the hidden message that came back, for example
+`Hidden message decoded: "Suite Payload Test P2-5"`, which proves the round
+trip; if the message differs the row fails with an execution error naming
+both texts. Rows for the known degradations carry the explanatory note from
+section 3.
 
 ### Reading the results
 
