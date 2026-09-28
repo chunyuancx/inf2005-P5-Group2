@@ -49,7 +49,7 @@ class TableState:
 
 class GlassDesktop(ApplicationWindow):
     controls = ("browse_button", "protect_button", "verify_button", "save_button",
-                "test_button", "lsb_box", "passphrase_box", "mode_box", "manual_box")
+                "test_button", "lsb_box", "passphrase_box", "payload_box", "mode_box", "manual_box")
 
     def __init__(self, root, controller, runner=None):
         self._initialize_state(root, controller, runner)
@@ -61,6 +61,7 @@ class GlassDesktop(ApplicationWindow):
         self.statuses_table, self.results_table = TableState(), TableState()
         self.path.trace_add("write", self.invalidate)
         self.lsb.trace_add("write", self.invalidate)
+        self.payload.trace_add("write", self.invalidate)
         self.requests = Queue()
         self.close_requested = False
         self.closed = False
@@ -74,9 +75,11 @@ class GlassDesktop(ApplicationWindow):
             "path": self.path.get(), "lsb": self.lsb.get(), "busy": self.busy,
             # Report only that a passphrase is held, never the passphrase itself.
             "passphrase_set": bool(self.passphrase.get()),
+            "payload": self.payload.get(),
             "start_mode": self.start_mode.get(),
             "manual_start": self.manual_start.get(),
             "output": self.output.get(), "verdict": self.verdict.get(),
+            "decoded_payload": self.decoded_payload.get(),
             "test_output": self.test_output.get(), "test_summary": self.test_summary.get(),
             "protected": self.protected is not None,
             "save_ready": self.protected is not None and self.verified_protected,
@@ -120,6 +123,11 @@ class GlassDesktop(ApplicationWindow):
             if value is not None and not isinstance(value, str):
                 raise ValueError("Passphrase must be text.")
             self.passphrase.set(value or "")
+        elif name == "payload":
+            value = payload.get("value")
+            if value is not None and not isinstance(value, str):
+                raise ValueError("Payload must be text.")
+            self.payload.set(value or "")
         elif name == "start_mode":
             if payload.get("value") not in {"auto", "manual"}:
                 raise ValueError("Start mode must be automatic or manual.")

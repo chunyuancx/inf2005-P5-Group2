@@ -54,6 +54,8 @@
         <div class="card-content"><div class="depth-heading"><h2>A finer layer.</h2><span class="depth-value"><b id="depth-value">1</b><small>BIT LSB</small></span></div>
           <div class="depth-selector" role="group" aria-label="LSB depth"><button data-depth="1" aria-pressed="true">1</button><button data-depth="2" aria-pressed="false">2</button><button data-depth="3" aria-pressed="false">3</button><button data-depth="4" aria-pressed="false">4</button><button data-depth="5" aria-pressed="false">5</button><button data-depth="6" aria-pressed="false">6</button><button data-depth="7" aria-pressed="false">7</button><button data-depth="8" aria-pressed="false">8</button></div>
           <p class="tiny muted depth-note">Use the same depth to protect and verify.</p>
+          <label class="payload-field" for="payload"><span>PAYLOAD TO EMBED</span><textarea id="payload" data-control="payload_box" rows="3" maxlength="4096" spellcheck="false" placeholder="Type the message you want to hide"></textarea></label>
+          <p class="tiny muted">This text is signed and embedded in the protected media.</p>
           <label class="passphrase-field" for="passphrase"><span>PASSPHRASE</span><input type="password" id="passphrase" data-control="passphrase_box" autocomplete="off" spellcheck="false" placeholder="Enter your secret passphrase"></label>
           <p class="tiny muted" id="passphrase-hint">Decides where the payload hides. Party B needs this same passphrase. It is never stored in the file.</p>
           <div class="start-mode" role="group" aria-label="Start location mode"><button id="mode-auto" data-mode="auto" data-control="mode_box" aria-pressed="true">Automatic</button><button id="mode-manual" data-mode="manual" data-control="mode_box" aria-pressed="false">Manual</button><input type="number" id="manual-start" data-control="manual_box" min="1" step="1" placeholder="Position" aria-label="Manual start position"></div>
@@ -65,6 +67,7 @@
       <section class="glass result-card">
         <header class="card-heading"><span><span class="section-number">03</span> VERIFICATION</span><span class="status-pill" id="activity"><span class="live-dot"></span>STANDING BY</span></header>
         <div class="card-content"><div class="result-heading"><div><h2 class="verdict" id="verdict">Not verified<span class="muted"> yet.</span></h2><p id="output" class="muted" role="status" aria-live="polite">Choose an original or stego file to begin.</p></div><div class="result-mark" aria-hidden="true"><svg><use href="#shield"/></svg></div></div>
+          <div class="decoded-payload"><span>DECODED PAYLOAD</span><p id="decoded-payload">No decoded payload yet.</p></div>
           <div class="progress-track" aria-hidden="true"><span></span></div>
           <div class="stage-list" id="statuses"><div class="stage-placeholder"><span class="stage-dot"></span><span>Verification stages will appear here</span></div></div>
           <div class="save-row" id="save-row" hidden><span class="tiny muted">Self-check passed. This stego file is ready to share.</span><button class="secondary-button save-button" data-action="save" data-control="save_button" hidden disabled>Save stego file</button></div>

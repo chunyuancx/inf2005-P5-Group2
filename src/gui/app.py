@@ -28,12 +28,14 @@ class ApplicationWindow:
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.path = tk.StringVar()
         self.lsb = tk.StringVar(value="1")
+        self.payload = tk.StringVar()
         self.passphrase = tk.StringVar()
         # "auto" derives the start from the passphrase; "manual" uses the typed
         # position. FR7 allows the user to select or derive the location.
         self.start_mode = tk.StringVar(value="auto")
         self.manual_start = tk.StringVar()
         self.output = tk.StringVar(value="Choose an original or stego file to begin.")
+        self.decoded_payload = tk.StringVar(value="No decoded payload yet.")
         self.verdict = tk.StringVar(value="Not verified")
         self.test_output = tk.StringVar(value="Run the reporting demo to generate a new evidence folder.")
         self.test_summary = tk.StringVar(value="No test run yet")
@@ -63,6 +65,7 @@ class ApplicationWindow:
         ttk.Label(body, text="Media preview and playback are available in the glass desktop view.",
                   style="Footer.TLabel").pack(anchor="w", pady=(10, 0))
         self.lsb.trace_add("write", self.invalidate)
+        self.payload.trace_add("write", self.invalidate)
         self.path.trace_add("write", self.invalidate)
         root.bind("<ButtonPress-1>", self._start_drag, add="+")
         root.bind("<B1-Motion>", self._drag_window, add="+")
@@ -122,6 +125,11 @@ class ApplicationWindow:
         ttk.Label(secret, text="Passphrase", style="Heading.TLabel").pack(side="left", padx=(0, 12))
         self.passphrase_box = ttk.Entry(secret, textvariable=self.passphrase, show="•")
         self.passphrase_box.pack(side="left", fill="x", expand=True)
+        payload = ttk.Frame(actions)
+        payload.pack(fill="x", pady=(10, 0))
+        ttk.Label(payload, text="Payload", style="Heading.TLabel").pack(side="left", padx=(0, 12))
+        self.payload_box = ttk.Entry(payload, textvariable=self.payload)
+        self.payload_box.pack(side="left", fill="x", expand=True)
         manual = ttk.Frame(actions)
         manual.pack(fill="x", pady=(10, 0))
         self.mode_box = ttk.Checkbutton(manual, text="Choose start position manually",
@@ -147,6 +155,8 @@ class ApplicationWindow:
                                      column=0, columnspan=2, sticky="nsew")
         ttk.Label(result, textvariable=self.verdict, style="Verdict.TLabel").pack(anchor="w")
         ttk.Label(result, textvariable=self.output, wraplength=820, justify="left").pack(anchor="w", pady=(6, 10))
+        ttk.Label(result, text="Decoded payload", style="Heading.TLabel").pack(anchor="w", pady=(4, 2))
+        ttk.Label(result, textvariable=self.decoded_payload, wraplength=820, justify="left").pack(anchor="w", pady=(0, 10))
         row = ttk.Frame(result)
         row.pack(fill="x", pady=(0, 10))
         self.verify_button = ttk.Button(row, text="Verify", command=self.verify)
@@ -251,6 +261,8 @@ class ApplicationWindow:
         self.preview_version += 1
         self.save_button.configure(state="disabled")
         self.verdict.set("Not verified")
+        if hasattr(self, "decoded_payload"):
+            self.decoded_payload.set("No decoded payload yet.")
         self._clear_table(self.statuses_table)
         self.output.set("Selection changed. Run protect or verify.")
 
@@ -304,7 +316,9 @@ class ApplicationWindow:
         for button in (self.browse_button, self.protect_button, self.verify_button, self.test_button):
             button.configure(state="disabled" if busy else "normal")
         self.lsb_box.configure(state="disabled" if busy else "readonly")
-        for box in (self.passphrase_box, self.manual_box, self.mode_box):
+        for box in (self.passphrase_box, getattr(self, "payload_box", None), self.manual_box, self.mode_box):
+            if box is None:
+                continue
             box.configure(state="disabled" if busy else "normal")
         ready = self.protected is not None and self.verified_protected
         self.save_button.configure(state="normal" if not busy and ready else "disabled")
@@ -348,7 +362,13 @@ class ApplicationWindow:
             self.preview_version += 1
             self.save_button.configure(state="disabled")
             self.output.set("Protection complete. Verify the protected copy to check it, then save it.")
-        self._submit(lambda: self.controller.protect(path, depth), complete,
+        payload = getattr(self, "payload", None)
+        payload_text = payload.get() if payload is not None else ""
+        if payload_text:
+            work = lambda: self.controller.protect(path, depth, payload_text)
+        else:
+            work = lambda: self.controller.protect(path, depth)
+        self._submit(work, complete,
                      lambda exc: self.output.set(str(exc)))
 
     def verify(self):
@@ -363,6 +383,8 @@ class ApplicationWindow:
         self.verified_protected = False
         self.save_button.configure(state="disabled")
         self.verdict.set("Not verified")
+        if hasattr(self, "decoded_payload"):
+            self.decoded_payload.set("No decoded payload yet.")
         self._clear_table(self.statuses_table)
         try:
             path, depth = self._inputs()
@@ -442,6 +464,9 @@ class ApplicationWindow:
     def show_result(self, result):
         self.verdict.set(result.verdict.value)
         self.output.set(result.message)
+        decoded = getattr(result, "decoded_payload", None)
+        if hasattr(self, "decoded_payload"):
+            self.decoded_payload.set(decoded if decoded else "No decoded payload found.")
         self._clear_table(self.statuses_table)
         for stage, status in result.statuses.items():
             self.statuses_table.insert("", "end", values=(stage.capitalize(), status))

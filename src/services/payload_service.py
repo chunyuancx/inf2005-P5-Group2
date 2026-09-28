@@ -17,11 +17,12 @@ HEADER = struct.Struct(">2sHH")
 
 
 class EnvelopePayloadService:
-    def create(self, media: Media, digest: bytes) -> bytes:
+    def create(self, media: Media, digest: bytes, payload: str = "") -> bytes:
         content = PayloadContent(metadata={
             "kind": media.kind.value,
             "format": media.suffix,
             "digest": digest.hex(),
+            "payload": payload,
         })
         return content.get_serializable_data()
 
