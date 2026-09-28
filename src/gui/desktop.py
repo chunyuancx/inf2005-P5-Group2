@@ -245,7 +245,7 @@ def make_server(desktop):
             self.end_headers()
             try:
                 self.wfile.write(body)
-            except (BrokenPipeError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 pass
 
         def authorized(self):
@@ -302,7 +302,7 @@ def make_server(desktop):
                 else:
                     changed, total = audio_difference(original, sources["protected"])
                     self.send(200, json.dumps({"changed": changed, "total": total}).encode())
-            except (BrokenPipeError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 pass
             except Exception:
                 # Unreadable media or a size mismatch simply shows no preview.
@@ -333,7 +333,7 @@ def make_server(desktop):
                 else:
                     changed, total = audio_difference(before, after)
                     self.send(200, json.dumps({"changed": changed, "total": total}).encode())
-            except (BrokenPipeError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 pass
             except Exception:
                 self.send(404, b'{}')
