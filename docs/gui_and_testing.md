@@ -81,62 +81,98 @@ service.
 
 ### Image files (PNG, BMP)
 
-| Attack | What it does | Simulates |
-|---|---|---|
-| `pixel_edit` | flips the top bit of one channel of the centre pixel | the smallest visible edit |
-| `region_edit` | paints a solid block over the bottom-right tenth | a stamp or watermark |
-| `crop_bottom` | removes the bottom tenth of the rows | trimming that leaves earlier pixels intact |
-| `resize` | scales to 90% with resampling | every pixel recomputed |
-| `jpeg_roundtrip` | saves as JPEG quality 90 and converts back (alpha kept) | lossy compression |
-| `lsb_noise` | randomises the lowest bit of every channel | invisible payload destruction |
-| `lsb_strip` | clears the lowest bits at the chosen depth | invisible payload wipe |
-| `reencode_lossless` | decodes and re-saves in the same format | a benign re-save; must survive |
-| `convert_container` | rewrites the pixels as BMP (or PNG) | a benign conversion; RGBA PNGs lose alpha |
+Expected verdict after the attack, verified with the same depth and settings
+the file was protected with. "Manual" is a manual start position; "Automatic"
+is a passphrase-derived start.
+
+| Attack | What it does | Manual | Automatic |
+|---|---|---|---|
+| `reencode_lossless` Re-save losslessly | decodes and re-saves in the same format | Authentic | Authentic |
+| `convert_container` Convert PNG to BMP or back | rewrites the pixels in the other lossless container | Authentic (RGB); Tampered / Payload Missing for RGBA PNGs, which lose their alpha channel | same |
+| `pixel_edit` Edit one pixel | flips the top bit of one channel of the centre pixel | Tampered | Payload Missing (note) |
+| `region_edit` Paint a block | paints a solid block over the bottom-right tenth | Tampered | Payload Missing (note) |
+| `crop_bottom` Crop the bottom | removes the bottom tenth of the rows | Tampered | Payload Missing (note) |
+| `lsb_noise` Randomise low bits | randomises the lowest bit of every channel | Payload Missing | Payload Missing |
+| `lsb_strip` Clear low bits | clears the lowest bits at the chosen depth | Payload Missing | Payload Missing |
+| `resize` Resize to 90% | scales with resampling, every pixel recomputed | Payload Missing | Payload Missing |
+| `jpeg_roundtrip` JPEG round trip | saves as JPEG quality 90 and converts back, alpha kept | Payload Missing | Payload Missing |
+| `edit_payload` Edit the payload | changes the media ID inside the signed JSON | Signature Invalid | Signature Invalid |
+| `forge_message` Forge the hidden message | rewrites the hidden message inside the signed JSON | Signature Invalid | Signature Invalid |
+| `corrupt_signature` Corrupt the signature | flips one bit in the embedded signature | Signature Invalid | Signature Invalid |
+| `wipe_payload` Wipe the payload | overwrites the whole envelope with zeros | Payload Missing | Payload Missing |
 
 ### Audio files (16-bit PCM WAV)
 
-| Attack | What it does | Simulates |
-|---|---|---|
-| `sample_edit` | flips a high-order bit of the middle sample | a single click |
-| `silence_tail` | zeroes the last twentieth of the samples | a muted ending |
-| `truncate` | drops the last tenth of the samples | trimming that leaves earlier samples intact |
-| `gain` | scales every sample to 80% | a volume change |
-| `lsb_noise` | randomises the lowest bit of every sample | inaudible payload destruction |
-| `lsb_strip` | clears the lowest bits at the chosen depth | inaudible payload wipe |
-| `reencode_lossless` | rewrites the WAV with identical samples | a benign re-save; must survive |
+| Attack | What it does | Manual | Automatic |
+|---|---|---|---|
+| `reencode_lossless` Re-write the WAV | rewrites the WAV with identical samples | Authentic | Authentic |
+| `sample_edit` Edit one sample | flips a high-order bit of the middle sample | Tampered | Payload Missing (note) |
+| `silence_tail` Silence the tail | zeroes the last twentieth of the samples | Tampered | Payload Missing (note) |
+| `truncate` Truncate the end | drops the last tenth of the samples | Tampered | Payload Missing (note) |
+| `lsb_noise` Randomise low bits | randomises the lowest bit of every sample | Payload Missing | Payload Missing |
+| `lsb_strip` Clear low bits | clears the lowest bits at the chosen depth | Payload Missing | Payload Missing |
+| `gain` Change volume | scales every sample to 80% | Payload Missing | Payload Missing |
+| `edit_payload` Edit the payload | changes the media ID inside the signed JSON | Signature Invalid | Signature Invalid |
+| `forge_message` Forge the hidden message | rewrites the hidden message inside the signed JSON | Signature Invalid | Signature Invalid |
+| `corrupt_signature` Corrupt the signature | flips one bit in the embedded signature | Signature Invalid | Signature Invalid |
+| `wipe_payload` Wipe the payload | overwrites the whole envelope with zeros | Payload Missing | Payload Missing |
 
-### Payload-level attacks (both file types)
+(note) In automatic mode the start position is derived from the file content,
+so a content edit moves it and the payload cannot be found; the file is still
+rejected, with a less specific verdict. See `verification_integration.md`
+section 7. The three payload-level attacks need the LSB depth and start
+location of the payload, so the attack lab asks for them before running.
 
-| Attack | What it does | Simulates |
-|---|---|---|
-| `edit_payload` | changes the media ID inside the signed JSON, signature untouched | forging the hidden record |
-| `forge_message` | rewrites the hidden message text inside the signed JSON, signature untouched | forging what Party B reads |
-| `corrupt_signature` | flips one bit in the embedded signature | a damaged or forged signature |
-| `wipe_payload` | overwrites the whole envelope with zeros | scrubbing the hidden data |
+Verified end to end on 28 September 2026: all 13 image attacks and all 11
+audio attacks produced these verdicts through the app's own workflow, in
+both modes, on the bundled samples and on a 2004 by 1187 RGB photo.
 
 ## 4. Automated test runner and evidence
 
 `python -m src.testing` builds the real suite and writes a fresh folder under
-`test-evidence/` containing `results.json`, `results.log` and `results.md`. It
-exits non-zero if any scenario fails, so CI fails with it. Options: `--cover`
-(repeatable), `--lsb` (repeatable), `--mode manual|auto|both`, `--demo` (the
-two canned reporting scenarios).
+`test-evidence/` named `run-<date>_<time>` containing `results.json`,
+`results.log` and `results.md`. It exits non-zero if any scenario fails, so CI
+fails with it. Options: `--cover` (repeatable), `--lsb` (repeatable),
+`--mode manual|auto|both`, `--message` (the hidden text embedded in every
+cover), `--demo` (the two canned reporting scenarios). The Test studio runs the
+same suite from the "Every attack (full simulation suite)" entry, adding the
+studio's file as an extra cover and using the studio's hidden message.
 
-For each cover, depth and start mode the suite protects the cover, applies each
-attack to the saved stego copy, and verifies the result. It also covers the
-verifier-side cases: unprotected cover, wrong public key, wrong passphrase,
-wrong manual position, wrong LSB depth, missing public key and an unsupported
-format. Each scenario states the verdict expected **today**:
+### What one run contains
 
-| Scenario | Manual start | Passphrase start |
-|---|---|---|
-| clean, lossless re-save | Authentic | Authentic |
-| visible edits, crop, truncate | Tampered | Payload Missing (note) |
-| LSB noise or strip, resize, gain, JPEG | Payload Missing | Payload Missing |
-| edited payload, corrupted signature | Signature Invalid | Signature Invalid |
-| wiped payload, unprotected cover, wrong depth | Payload Missing | Payload Missing |
-| wrong passphrase or position | Payload Missing (note) | Payload Missing (note) |
-| missing public key, unsupported format | Cannot Verify | Cannot Verify |
+For every cover (bundled `lambda-icon.png` and `original.wav`, plus any
+`--cover` or studio file), every depth (default 1) and both start modes
+(manual position 100, and the passphrase `group2 attack suite`), the suite:
+
+1. protects a fresh copy of the cover with the hidden message and saves it;
+2. runs the **clean** scenario: verifies the untouched stego copy, expecting
+   Authentic **and** the hidden message to decode exactly;
+3. runs every attack from section 3 that applies to the cover's type on the
+   saved stego copy, expecting the verdict in the Manual or Automatic column;
+4. runs the verifier-side cases below once per cover and depth.
+
+| Verifier case | Mode | What it does | Expected |
+|---|---|---|---|
+| `unprotected_cover` | manual | verifies the original cover | Payload Missing |
+| `wrong_public_key` | manual | verifies with a different key pair | Signature Invalid |
+| `wrong_passphrase` | auto | verifies with another passphrase | Payload Missing (note) |
+| `wrong_start_position` | manual | verifies at position 107 instead of 100 | Payload Missing (note) |
+| `wrong_lsb_depth` | manual | verifies at the next depth | Payload Missing |
+| `missing_public_key` | manual | verifies with no public key on the machine | Cannot Verify |
+| `unsupported_format` | manual | verifies a copy renamed to .jpg | Cannot Verify |
+
+With the two bundled covers at depth 1 this is 62 scenarios; with a third
+cover it is about 94 to 100. Each row records the expected verdict, the actual
+verdict, the decoded message where one was expected, and a note. The
+`unprotected_cover` case is skipped for a studio file, which may itself be a
+stego file.
+
+### Reading the results
+
+A scenario **passes** when the actual verdict equals the expected one, and,
+for clean scenarios, the hidden message decodes exactly. An execution error
+always fails. PASS therefore means "the system reacted correctly", not "the
+file was authentic": a Tampered result for a painted block is a pass.
 
 The notes record the two known degradations from `verification_integration.md`:
 in passphrase mode an edit moves the derived start so Tampered reads as Payload
