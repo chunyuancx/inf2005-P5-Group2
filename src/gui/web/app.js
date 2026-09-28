@@ -2,7 +2,7 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 let state = null, requestPending = false, lastRows = '', lastResults = '', closing = false;
-let toastTimer;
+let toastTimer, lastPreview = '', manualDirty = false;
 
 function notify(message) {
   $('#toast').textContent = message;
@@ -28,18 +28,23 @@ function render(next) {
   $('#verdict').textContent = next.verdict === 'Not verified' ? 'Not verified yet.' : next.verdict;
   $('#activity').replaceChildren(Object.assign(document.createElement('span'), {className: 'live-dot'}),
     document.createTextNode(next.busy ? 'PROCESSING' : next.verdict === 'Not verified' ? 'STANDING BY' : 'COMPLETE'));
-  $('#save-hint').textContent = next.protected ? 'Your protected media is ready to save.' : 'Protect your media to create a shareable stego file.';
+  $('#save-row').hidden = $('[data-action=save]').hidden = !next.save_ready;
+  $('#save-hint').textContent = next.save_ready ? 'Saved copies can be verified here as Party B.'
+    : next.protected ? 'Protected copy ready. Verify it to check the result before saving.'
+    : 'Verify checks the protected copy, or the file you selected.';
   // The session holds a passphrase the page never receives; say so after a refresh.
   const manual = next.start_mode === 'manual';
   for (const button of $$('[data-mode]')) button.setAttribute('aria-pressed', String(button.dataset.mode === next.start_mode));
   $('#manual-start').hidden = !manual;
-  if (document.activeElement !== $('#manual-start')) $('#manual-start').value = next.manual_start;
+  // Never overwrite a position the user has typed but not yet sent: a click on
+  // Protect blurs the box, and the next render would otherwise erase it.
+  if (!manualDirty && document.activeElement !== $('#manual-start')) $('#manual-start').value = next.manual_start;
   $('#mode-hint').textContent = manual
-    ? 'Manual uses the position you type. It is not protected by the passphrase — anyone who guesses the number can read the payload.'
-    : 'Automatic derives the position from your passphrase — different for every file.';
+    ? 'Manual uses the position you type. It is not protected by the passphrase, so anyone who guesses the number can read the payload.'
+    : 'Automatic derives the position from your passphrase, so it differs for every file.';
   $('#passphrase-hint').textContent = next.passphrase_set && !$('#passphrase').value
     ? 'This session already holds a passphrase. Re-enter it to protect or verify.'
-    : 'Decides where the payload hides. Party B needs this same passphrase — it is never stored in the file.';
+    : 'Decides where the payload hides. Party B needs this same passphrase. It is never stored in the file.';
   $('#test-summary').textContent = next.test_summary;
   $('#test-output').textContent = next.test_output;
   const rows = JSON.stringify(next.statuses);
@@ -51,11 +56,14 @@ function render(next) {
       row.textContent = 'Verification stages will appear here'; $('#statuses').append(row);
     }
     for (const row of next.statuses) {
-      const line = document.createElement('div'); line.className = 'stage-row';
+      const line = document.createElement('div'); line.className = 'stage-row ' + (row.tags || []).join(' ');
+      const mark = document.createElement('span'); mark.className = 'stage-mark'; line.append(mark);
       for (const value of row.values) { const text = document.createElement('span'); text.textContent = value; line.append(text); }
       $('#statuses').append(line);
     }
   }
+  const preview = [next.media_kind, next.preview_version, next.protected, next.path].join('|');
+  if (preview !== lastPreview) { lastPreview = preview; updatePreview(next); }
   const results = JSON.stringify(next.results);
   if (results !== lastResults) {
     lastResults = results;
@@ -66,6 +74,66 @@ function render(next) {
       for (const value of row.values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
       $('#results').append(tr);
     }
+  }
+}
+
+// Preview panes load media through the session's own endpoints; the page
+// never receives file bytes through the polled state.
+function showPane(pane, kind, src, emptyText) {
+  const img = pane.querySelector('img'), audio = pane.querySelector('audio'), empty = pane.querySelector('.pane-empty');
+  const label = empty.querySelector('span');
+  if (emptyText) label.textContent = emptyText;
+  img.hidden = true; if (audio) audio.hidden = true; empty.hidden = false;
+  img.removeAttribute('src'); if (audio) { audio.removeAttribute('src'); audio.load(); }
+  if (!src) return;
+  if (kind === 'image') {
+    img.onerror = () => { img.hidden = true; empty.hidden = false; label.textContent = 'Preview unavailable for this file'; };
+    img.onload = () => { img.hidden = false; empty.hidden = true; };
+    img.src = src;
+  } else if (kind === 'audio' && audio) {
+    audio.src = src; audio.hidden = false; empty.hidden = true;
+  }
+}
+
+async function updatePreview(next) {
+  const kind = next.media_kind, v = next.preview_version;
+  showPane($('#pane-original'), kind, next.path && kind ? `preview/original?v=${v}` : null, 'Source media preview');
+  showPane($('#pane-protected'), kind, next.protected && kind ? `preview/protected?v=${v}` : null, 'Stego media preview');
+  const diff = $('#pane-difference');
+  diff.classList.toggle('comparing', Boolean(next.protected && kind));
+  showPane(diff, null, null, next.protected ? `Comparing every ${kind === 'audio' ? 'sample' : 'pixel'} of the original with the protected copy…` : 'Protect a file to see what changed');
+  const unit = kind === 'audio' ? 'sample' : 'pixel';
+  $('#preview-note').textContent = !next.path ? 'Choose a file to preview it. Protect it to compare the original with the stego output.'
+    : !next.protected ? 'The selected file is shown on the left. Protect it to compare it with the stego output.'
+    : `The protected copy looks identical by design. The third pane marks every ${unit} whose low bits now carry payload.`;
+  if (!next.protected || !kind) return;
+  const started = performance.now();
+  try {
+    const response = await fetch(`preview/difference?v=${v}`);
+    if (!response.ok) throw new Error('No difference available');
+    if (lastPreview !== [next.media_kind, next.preview_version, next.protected, next.path].join('|')) return; // superseded
+    const type = response.headers.get('Content-Type') || '';
+    if (type.startsWith('image/')) {
+      const blob = await response.blob();
+      const img = diff.querySelector('img');
+      const changed = Number(response.headers.get('X-Changed')), total = Number(response.headers.get('X-Total'));
+      const box = (response.headers.get('X-Box') || '').split(',').map(Number), scale = Number(response.headers.get('X-Scale'));
+      const seconds = ((performance.now() - started) / 1000).toFixed(1);
+      img.onload = () => {
+        URL.revokeObjectURL(img.src); img.hidden = false; diff.querySelector('.pane-empty').hidden = true; diff.classList.remove('comparing');
+        const where = box.length === 4 ? ` The third pane zooms ${scale >= 1 ? scale.toFixed(1) + 'x into' : 'to'} rows ${box[1].toLocaleString()} to ${box[3].toLocaleString()}, columns ${box[0].toLocaleString()} to ${box[2].toLocaleString()}, where the payload sits.` : '';
+        $('#preview-note').textContent = `The protected copy looks identical by design. ${changed.toLocaleString()} of ${total.toLocaleString()} pixels changed (compared in ${seconds}s).${where}`;
+      };
+      img.onerror = () => { diff.classList.remove('comparing'); $('#difference-text').textContent = 'The browser could not display the comparison image.'; };
+      img.src = URL.createObjectURL(blob);
+    } else {
+      const counts = await response.json();
+      diff.classList.remove('comparing');
+      $('#difference-text').textContent = `${counts.changed.toLocaleString()} of ${counts.total.toLocaleString()} samples changed. Play both to hear that they match.`;
+    }
+  } catch (error) {
+    diff.classList.remove('comparing');
+    $('#difference-text').textContent = `Comparison unavailable: ${error.message}. The original and protected copies may differ in size or be unreadable.`;
   }
 }
 
@@ -97,11 +165,15 @@ async function poll() {
 // Protect and verify both need the passphrase the user typed. Send it first so
 // the value never has to be polled back into the page.
 const NEEDS_PASSPHRASE = new Set(['protect', 'verify']);
+$('#manual-start').addEventListener('input', () => { manualDirty = true; });
 $$('[data-action]').forEach(button => button.addEventListener('click', async () => {
   const name = button.dataset.action;
   if (NEEDS_PASSPHRASE.has(name)) {
-    await action('passphrase', $('#passphrase').value);
-    await action('manual_start', $('#manual-start').value);
+    // Read both boxes before any request re-renders the page.
+    const passphrase = $('#passphrase').value, manualStart = $('#manual-start').value;
+    await action('passphrase', passphrase);
+    await action('manual_start', manualStart);
+    manualDirty = false;
   }
   await action(name);
 }));

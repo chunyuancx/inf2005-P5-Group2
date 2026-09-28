@@ -5,12 +5,19 @@ from tkinter import filedialog, messagebox, ttk
 
 from src.controllers import ApplicationController
 from src.exceptions import IntegrationError
+from src.models import Verdict
 from src.testing.demo_scenarios import build_demo_scenarios
 from src.testing.runner import AutomatedTestRunner
 from src.gui.theme import ACCENT, BACKDROP, INSET, MUTED, PANEL, TEXT, CosmicHeader, GlassCard
 
 
 class ApplicationWindow:
+    # Class-level defaults so partially constructed windows (tests) still work.
+    preview_version = 0      # bumped whenever the preview panes must reload
+    verified_protected = False  # the protected copy passed its self-check; saving allowed
+    _progress = None         # (stages, current index) while verification runs
+    _progress_dirty = False  # set from the worker thread, drained by the poll loop
+
     def _initialize_state(self, root, controller, runner=None):
         """Shared workflow state for the native and glass desktop views."""
         self.root, self.controller = root, controller
@@ -53,7 +60,7 @@ class ApplicationWindow:
         self.tabs.add(testing_card, text="  Automated Tests  ")
         self._build_workspace(workspace)
         self._build_testing(testing)
-        ttk.Label(body, text="Media preview and playback will be available when media adapters are connected.",
+        ttk.Label(body, text="Media preview and playback are available in the glass desktop view.",
                   style="Footer.TLabel").pack(anchor="w", pady=(10, 0))
         self.lsb.trace_add("write", self.invalidate)
         self.path.trace_add("write", self.invalidate)
@@ -109,7 +116,7 @@ class ApplicationWindow:
         ttk.Label(settings, text="LSB depth", style="Heading.TLabel").pack(side="left", padx=(0, 12))
         self.lsb_box = ttk.Combobox(settings, textvariable=self.lsb, values=list(range(1, 9)), state="readonly", width=4)
         self.lsb_box.pack(side="left")
-        ttk.Label(settings, text="bits (1–8)", style="Muted.TLabel").pack(side="left", padx=8)
+        ttk.Label(settings, text="bits (1 to 8)", style="Muted.TLabel").pack(side="left", padx=8)
         secret = ttk.Frame(actions)
         secret.pack(fill="x", pady=(10, 0))
         ttk.Label(secret, text="Passphrase", style="Heading.TLabel").pack(side="left", padx=(0, 12))
@@ -123,33 +130,29 @@ class ApplicationWindow:
         self.mode_box.pack(side="left", padx=(0, 12))
         self.manual_box = ttk.Entry(manual, textvariable=self.manual_start, width=12)
         self.manual_box.pack(side="left")
-        ttk.Label(actions, text="Automatic derives the position from your passphrase — different for every file.\n"
+        ttk.Label(actions, text="Automatic derives the position from your passphrase, so it differs for every file.\n"
                                 "Manual uses the position you type, which is not protected by the passphrase.\n"
                                 "Party B needs the same depth, and whichever of the two you used.",
                   style="Muted.TLabel", justify="left").pack(anchor="w", pady=(6, 12))
-        buttons = ttk.Frame(actions)
-        buttons.pack(fill="x")
-        buttons.columnconfigure((0, 1), weight=1)
-        self.protect_button = ttk.Button(buttons, text="Protect / encode", style="Primary.TButton", command=self.protect)
-        self.protect_button.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        self.verify_button = ttk.Button(buttons, text="Verify file", command=self.verify)
-        self.verify_button.grid(row=0, column=1, sticky="ew")
-        self.save_button = ttk.Button(actions, text="Save stego file…", command=self.save, state="disabled")
-        self.save_button.pack(fill="x", pady=(8, 0))
+        self.protect_button = ttk.Button(actions, text="Protect / encode", style="Primary.TButton", command=self.protect)
+        self.protect_button.pack(fill="x")
         preview = self._workspace_card(parent, "MEDIA PREVIEW", row=1, column=1,
                                       sticky="nsew", pady=(0, 12))
-        ttk.Label(preview, text="Original  →  Stego", style="Heading.TLabel").pack(anchor="w")
-        ttk.Label(preview, text="Image comparison is awaiting integration.", style="Muted.TLabel", wraplength=290).pack(anchor="w", pady=(8, 12))
-        ttk.Separator(preview).pack(fill="x", pady=(0, 10))
-        ttk.Label(preview, text="Audio playback", style="Heading.TLabel").pack(anchor="w", pady=(0, 8))
-        play = ttk.Frame(preview)
-        play.pack(fill="x")
-        ttk.Button(play, text="Play original", state="disabled").pack(side="left", padx=(0, 8))
-        ttk.Button(play, text="Play stego", state="disabled").pack(side="left")
+        ttk.Label(preview, text="Original and stego", style="Heading.TLabel").pack(anchor="w")
+        ttk.Label(preview, text="Side-by-side image comparison, the changed-bits map and audio "
+                                "playback are shown in the glass desktop. Launch it with "
+                                "python -m src (without --native).",
+                  style="Muted.TLabel", wraplength=290, justify="left").pack(anchor="w", pady=(8, 12))
         result = self._workspace_card(parent, "03 / VERIFICATION RESULT", row=2,
                                      column=0, columnspan=2, sticky="nsew")
         ttk.Label(result, textvariable=self.verdict, style="Verdict.TLabel").pack(anchor="w")
         ttk.Label(result, textvariable=self.output, wraplength=820, justify="left").pack(anchor="w", pady=(6, 10))
+        row = ttk.Frame(result)
+        row.pack(fill="x", pady=(0, 10))
+        self.verify_button = ttk.Button(row, text="Verify", command=self.verify)
+        self.verify_button.pack(side="left")
+        self.save_button = ttk.Button(row, text="Save stego file", command=self.save, state="disabled")
+        self.save_button.pack(side="left", padx=(8, 0))
         self.statuses_table = self._table(result, (("stage", "Verification stage", 240), ("status", "Status", 540)), height=4)
 
     def _build_testing(self, parent):
@@ -164,6 +167,9 @@ class ApplicationWindow:
         self.results_table = self._table(parent, (("case", "Scenario", 330), ("expected", "Expected", 150), ("actual", "Actual", 150), ("result", "Result", 70)), height=9)
         self.results_table.tag_configure("pass", foreground="#8fe0c3")
         self.results_table.tag_configure("fail", foreground="#ff9aaf")
+        self.statuses_table.tag_configure("done", foreground="#8fe0c3")
+        self.statuses_table.tag_configure("running", foreground="#e8c5ff")
+        self.statuses_table.tag_configure("pending", foreground="#8d7f9c")
         evidence = ttk.LabelFrame(parent, text="Test evidence", padding=12)
         evidence.pack(fill="x", pady=(12, 0))
         ttk.Label(evidence, textvariable=self.test_output, wraplength=820, justify="left").pack(anchor="w")
@@ -241,6 +247,8 @@ class ApplicationWindow:
 
     def invalidate(self, *_):
         self.protected = None
+        self.verified_protected = False
+        self.preview_version += 1
         self.save_button.configure(state="disabled")
         self.verdict.set("Not verified")
         self._clear_table(self.statuses_table)
@@ -298,7 +306,8 @@ class ApplicationWindow:
         self.lsb_box.configure(state="disabled" if busy else "readonly")
         for box in (self.passphrase_box, self.manual_box, self.mode_box):
             box.configure(state="disabled" if busy else "normal")
-        self.save_button.configure(state="normal" if not busy and self.protected is not None else "disabled")
+        ready = self.protected is not None and self.verified_protected
+        self.save_button.configure(state="normal" if not busy and ready else "disabled")
 
     def _submit(self, work, success, failure):
         if self.busy:
@@ -307,6 +316,9 @@ class ApplicationWindow:
         future = self.executor.submit(work)
 
         def poll():
+            if self._progress_dirty:
+                self._progress_dirty = False
+                self._draw_progress()
             if not future.done():
                 self.root.after(50, poll)
                 return
@@ -332,14 +344,24 @@ class ApplicationWindow:
 
         def complete(media):
             self.protected = media
-            self.save_button.configure(state="normal")
-            self.output.set("Protection complete. Save the stego file to share with Party B.")
+            self.verified_protected = False
+            self.preview_version += 1
+            self.save_button.configure(state="disabled")
+            self.output.set("Protection complete. Verify the protected copy to check it, then save it.")
         self._submit(lambda: self.controller.protect(path, depth), complete,
                      lambda exc: self.output.set(str(exc)))
 
     def verify(self):
+        """Self-check a freshly protected copy, or verify the selected file.
+
+        While an unsaved protected copy exists, Verify checks that copy so the
+        user can confirm it before saving (Party A). Otherwise it verifies the
+        file chosen on disk (Party B).
+        """
         if self.busy:
             return
+        self.verified_protected = False
+        self.save_button.configure(state="disabled")
         self.verdict.set("Not verified")
         self._clear_table(self.statuses_table)
         try:
@@ -347,12 +369,75 @@ class ApplicationWindow:
         except IntegrationError as exc:
             self._verification_error(exc)
             return
+        finish = self._watch_stages()
+        media = self.protected
+        if media is not None:
+            self.output.set("Checking the protected copy…")
+            self._submit(lambda: self.controller.verify_media(media, depth),
+                         finish(self._show_self_check), finish(self._verification_error))
+            return
         self.output.set("Verifying selected file…")
-        self._submit(lambda: self.controller.verify(path, depth), self.show_result, self._verification_error)
+        self._submit(lambda: self.controller.verify(path, depth),
+                     finish(self.show_result), finish(self._verification_error))
+
+    def _show_self_check(self, result):
+        self.show_result(result)
+        self.verified_protected = result.verdict is Verdict.AUTHENTIC
+        if self.verified_protected:
+            self.save_button.configure(state="normal")
+            self.output.set(f"Self-check passed. {result.message} Save the stego file to share with Party B.")
+        else:
+            self.output.set(f"Self-check failed. {result.message}")
+
+    # ------------------------------------------------------------ live stages
+
+    def _watch_stages(self):
+        """Show each verification stage as it starts.
+
+        The engine calls ``on_stage`` from the worker thread, so the callback
+        only records the stage; the poll loop redraws on the Tk thread. The
+        engine stops at the first failure, so every stage before the current
+        one is known to have passed. Returns a wrapper that detaches the
+        observer once the result (or error) arrives.
+        """
+        engine = getattr(self.controller, "engine", None)
+        stages = tuple(getattr(type(engine), "STAGES", ()))
+        if not stages or not hasattr(engine, "on_stage"):
+            return lambda handler: handler
+        self._progress = (stages, 0)
+        self._draw_progress()
+
+        def started(stage):
+            self._progress = (stages, stages.index(stage) if stage in stages else 0)
+            self._progress_dirty = True
+        engine.on_stage = started
+
+        def finish(handler):
+            def wrapped(value):
+                engine.on_stage = None
+                self._progress = None
+                handler(value)
+            return wrapped
+        return finish
+
+    def _draw_progress(self):
+        if self._progress is None:
+            return
+        stages, current = self._progress
+        self._clear_table(self.statuses_table)
+        for index, stage in enumerate(stages):
+            if index < current:
+                status, tag = "Passed", "done"
+            elif index == current:
+                status, tag = "Checking…", "running"
+            else:
+                status, tag = "Waiting", "pending"
+            self.statuses_table.insert("", "end", values=(stage.capitalize(), status), tags=(tag,))
 
     def _verification_error(self, exc):
         self.verdict.set("Cannot Verify")
         self.output.set(str(exc))
+        self._clear_table(self.statuses_table)
 
     def show_result(self, result):
         self.verdict.set(result.verdict.value)

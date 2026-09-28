@@ -102,8 +102,13 @@ def exercise(browser, folder):
     assert browser.evaluate("!document.querySelector('#testing').hidden")
     browser.click('[data-view="workspace"]')
     browser.until("!state.busy && state.protected")
-    assert browser.evaluate("!document.querySelector('[data-action=save]').disabled && state.lsb==='3'")
+    assert browser.evaluate("document.querySelector('[data-action=save]').hidden && state.lsb==='3'")
     passed("protect workflow, busy controls, view switching and close guard")
+
+    browser.action("verify")  # self-check of the unsaved protected copy
+    browser.until("!state.busy && state.verdict==='Authentic' && state.save_ready")
+    assert browser.evaluate("state.protected && !document.querySelector('[data-action=save]').hidden && !document.querySelector('[data-action=save]').disabled")
+    passed("self-check of the protected copy reveals the save control")
 
     browser.action("save")  # cancel
     assert browser.evaluate("state.protected") and not (folder / "stego.png").exists()

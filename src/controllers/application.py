@@ -60,8 +60,14 @@ class ApplicationController:
 
     def verify(self, path: str, lsb: int) -> VerificationResult:
         try:
+            return self.verify_media(self.load(path), lsb)
+        except IntegrationError as exc:
+            return VerificationResult(Verdict.CANNOT_VERIFY, str(exc))
+
+    def verify_media(self, media: Media, lsb: int) -> VerificationResult:
+        """Verify media already in memory, such as a freshly protected copy."""
+        try:
             self.validate_lsb(lsb)
-            media = self.load(path)
             return self.engine.verify(media, lsb, self.service_for(media))
         except IntegrationError as exc:
             return VerificationResult(Verdict.CANNOT_VERIFY, str(exc))

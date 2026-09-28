@@ -57,14 +57,39 @@ class GuiCallbackTests(unittest.TestCase):
         self.window.save_button.configure.assert_called_with(state="disabled")
         self.window.output.set.assert_called_with("Unavailable")
 
-    def test_successful_protect_enables_save_without_authentic_verdict(self):
+    def test_successful_protect_waits_for_self_check_before_save(self):
         media = Media(b"protected", ".wav", MediaType.AUDIO)
         self.window.controller.protect.return_value = media
         self.window.protect()
         self.window.controller.protect.assert_called_once_with("input.png", 2)
         self.assertIs(self.window.protected, media)
-        self.window.save_button.configure.assert_called_with(state="normal")
+        self.assertFalse(self.window.verified_protected)
+        self.window.save_button.configure.assert_called_with(state="disabled")
         self.window.verdict.set.assert_called_with("Not verified")
+
+    def test_verify_self_checks_protected_copy_and_enables_save(self):
+        media = Media(b"protected", ".wav", MediaType.AUDIO)
+        self.window.protected = media
+        self.window.controller.verify_media.return_value = VerificationResult(
+            Verdict.AUTHENTIC, "Result details", {"hash": "Match"})
+        self.window.verify()
+        self.window.controller.verify_media.assert_called_once_with(media, 2)
+        self.window.controller.verify.assert_not_called()
+        self.assertIs(self.window.protected, media)
+        self.assertTrue(self.window.verified_protected)
+        self.window.save_button.configure.assert_called_with(state="normal")
+        self.window.verdict.set.assert_called_with(Verdict.AUTHENTIC.value)
+        self.assertIn("Self-check passed", self.window.output.set.call_args.args[0])
+
+    def test_failed_self_check_keeps_save_disabled(self):
+        media = Media(b"protected", ".png", MediaType.IMAGE)
+        self.window.protected = media
+        self.window.controller.verify_media.return_value = VerificationResult(
+            Verdict.SIGNATURE_INVALID, "Bad signature", {})
+        self.window.verify()
+        self.assertFalse(self.window.verified_protected)
+        self.window.save_button.configure.assert_called_with(state="disabled")
+        self.window.verdict.set.assert_called_with(Verdict.SIGNATURE_INVALID.value)
 
     def test_invalid_inputs_do_not_reach_controller(self):
         for path, depth in (("", "2"), ("input.png", "0"), ("input.png", "9"),

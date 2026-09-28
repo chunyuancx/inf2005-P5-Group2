@@ -16,6 +16,9 @@ from threading import Thread
 import webbrowser
 
 from src.gui.app import ApplicationWindow
+from src.gui.preview import audio_difference, image_difference
+
+MEDIA_TYPES = {".png": "image/png", ".bmp": "image/bmp", ".wav": "audio/wav"}
 
 
 class ControlState:
@@ -76,10 +79,31 @@ class GlassDesktop(ApplicationWindow):
             "output": self.output.get(), "verdict": self.verdict.get(),
             "test_output": self.test_output.get(), "test_summary": self.test_summary.get(),
             "protected": self.protected is not None,
+            "save_ready": self.protected is not None and self.verified_protected,
+            "media_kind": self.media_kind(),
+            "preview_version": self.preview_version,
             "controls": {name: getattr(self, name).state for name in self.controls},
             "statuses": list(self.statuses_table.rows.values()),
             "results": list(self.results_table.rows.values()),
         }
+
+    def media_kind(self):
+        suffix = Path(self.path.get()).suffix.lower()
+        if suffix in {".png", ".bmp"}:
+            return "image"
+        if suffix == ".wav":
+            return "audio"
+        return None
+
+    def preview_sources(self):
+        """Selected path and protected buffer for the preview endpoints.
+
+        Runs on the Tk thread; the HTTP handler reads the file and computes
+        the difference on its own thread afterwards.
+        """
+        return {"path": self.path.get(),
+                "suffix": Path(self.path.get()).suffix.lower(),
+                "protected": self.protected.data if self.protected is not None else None}
 
     def action(self, payload):
         name = payload.get("action")
@@ -150,14 +174,16 @@ def make_server(desktop):
         def log_message(self, *_):
             pass
 
-        def send(self, status, body, kind="application/json"):
+        def send(self, status, body, kind="application/json", extra=None):
             self.send_response(status)
             self.send_header("Content-Type", kind)
             self.send_header("Content-Length", str(len(body)))
+            for header, value in (extra or {}).items():
+                self.send_header(header, value)
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'")
+            self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: blob:; frame-ancestors 'none'; base-uri 'none'")
             self.end_headers()
             try:
                 self.wfile.write(body)
@@ -174,7 +200,10 @@ def make_server(desktop):
             if not self.authorized():
                 self.send(403, b'{}')
                 return
-            name = self.path.removeprefix(f"/{token}/")
+            name = self.path.removeprefix(f"/{token}/").partition("?")[0]
+            if name.startswith("preview/"):
+                self.send_preview(name.removeprefix("preview/"))
+                return
             if name == "state":
                 try:
                     self.send(200, json.dumps(desktop.invoke(desktop.snapshot)).encode())
@@ -187,6 +216,36 @@ def make_server(desktop):
                 self.send(404, b'{}')
                 return
             self.send(200, (assets / name).read_bytes(), types[name])
+
+        def send_preview(self, which):
+            try:
+                sources = desktop.invoke(desktop.preview_sources)
+                kind = MEDIA_TYPES.get(sources["suffix"])
+                if which not in {"original", "protected", "difference"} or not kind or not sources["path"]:
+                    raise ValueError("No preview")
+                if which == "original":
+                    self.send(200, Path(sources["path"]).read_bytes(), kind)
+                    return
+                if sources["protected"] is None:
+                    raise ValueError("Nothing protected yet")
+                if which == "protected":
+                    self.send(200, sources["protected"], kind)
+                    return
+                original = Path(sources["path"]).read_bytes()
+                if kind.startswith("image/"):
+                    diff = image_difference(original, sources["protected"])
+                    self.send(200, diff.png, "image/png",
+                              extra={"X-Changed": str(diff.changed), "X-Total": str(diff.total),
+                                     "X-Box": ",".join(map(str, diff.box)) if diff.box else "",
+                                     "X-Scale": f"{diff.scale:.2f}"})
+                else:
+                    changed, total = audio_difference(original, sources["protected"])
+                    self.send(200, json.dumps({"changed": changed, "total": total}).encode())
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            except Exception:
+                # Unreadable media or a size mismatch simply shows no preview.
+                self.send(404, b'{}')
 
         def do_POST(self):
             if not self.authorized() or self.path != f"/{token}/action":
@@ -219,7 +278,10 @@ def launch(root, controller, *, open_window=True):
                     Path(os.environ.get("PROGRAMFILES", "")) / "Google/Chrome/Application/chrome.exe"]
         browser = next((path for path in browsers if path.is_file()), None)
         if browser:
-            subprocess.Popen([str(browser), f"--app={url}", "--window-size=1440,1000"])
+            # Fill the screen so the whole workspace is visible without scrolling.
+            width, height = root.winfo_screenwidth(), root.winfo_screenheight()
+            subprocess.Popen([str(browser), f"--app={url}", "--start-maximized",
+                              "--window-position=0,0", f"--window-size={width},{height}"])
         else:
             webbrowser.open(url)
     try:
