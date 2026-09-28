@@ -39,6 +39,7 @@ function render(next) {
   const manual = next.start_mode === 'manual';
   for (const button of $$('[data-mode]')) button.setAttribute('aria-pressed', String(button.dataset.mode === next.start_mode));
   $('#manual-start').hidden = !manual;
+  $('#passphrase-block').hidden = manual;  // the passphrase only matters in Automatic mode
   // Never overwrite a position the user has typed but not yet sent: a click on
   // Protect blurs the box, and the next render would otherwise erase it.
   if (!manualDirty && document.activeElement !== $('#manual-start')) $('#manual-start').value = next.manual_start;
@@ -65,6 +66,7 @@ function render(next) {
   const labManual = next.attack_start_mode === 'manual';
   for (const button of $$('[data-attack-mode]')) button.setAttribute('aria-pressed', String(button.dataset.attackMode === next.attack_start_mode));
   $('#attack-manual-start').hidden = !labManual;
+  $('#attack-passphrase').closest('.lab-settings').hidden = labManual;
   if (!labDirty.manual && document.activeElement !== $('#attack-manual-start')) $('#attack-manual-start').value = next.attack_manual_start;
   if (!labDirty.message && document.activeElement !== $('#attack-message')) $('#attack-message').value = next.attack_message || '';
   $('#attack-passphrase').placeholder = next.attack_passphrase_set && !$('#attack-passphrase').value ? 'Passphrase held for this session; re-enter to change' : 'Passphrase the file was protected with';

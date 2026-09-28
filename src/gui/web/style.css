@@ -111,7 +111,7 @@ h2 { margin: 0; font-weight: 480; font-size: 21px; letter-spacing: -.7px; }.mute
 .payload-field textarea::placeholder { color: #7c7090; }
 .payload-field textarea:focus { outline: none; border-color: #e7c9ff88; box-shadow: 0 0 15px #c591fb2e; }
 .payload-field textarea:disabled { opacity: .5; }
-.start-mode { display: flex; gap: 5px; align-items: center; margin: 0 0 9px; }
+.lab-label-line { margin: 12px 0 7px; font-size: 10px; letter-spacing: .12em; color: var(--muted); }.start-mode { display: flex; gap: 5px; align-items: center; margin: 0 0 9px; }#passphrase-block .passphrase-field { margin-top: 4px; }.demo-card .lab-settings { margin-top: 4px; }
 .start-mode button { height: 31px; padding: 0 14px; border: 1px solid #c8a9e623; border-radius: 7px; background: #e6bdff06; color: #c4afd6; font-size: 11px; font-family: inherit; }
 .start-mode button[aria-pressed="true"] { background: linear-gradient(145deg,#edc5ff,#bf9be7); border-color: #f1d6ff; color: #312041; box-shadow: 0 0 15px #c591fb2e; }
 .start-mode button:not(:disabled):hover { border-color: #e7c9ff88; }
