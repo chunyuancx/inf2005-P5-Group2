@@ -132,10 +132,11 @@ def exercise(browser, folder):
     passed("authentic round trip, verification stages and refresh persistence")
 
     browser.click('[data-view="testing"]')
-    browser.action("run_tests")  # cancel
+    browser.evaluate("document.querySelector('#attack-select').value = '__suite__'")
+    browser.action("attack")  # suite entry, cancelled folder dialog
     assert browser.evaluate("state.results.length===0 && state.verdict==='Authentic'")
     for iteration in range(2):
-        browser.action("run_tests")
+        browser.action("attack")  # suite entry selected
         browser.until("!state.busy && state.test_summary.startsWith('2/2 passed')")
         assert browser.evaluate("document.querySelectorAll('#results-passed tr.pass').length===2 && document.querySelector('#passed-empty').hidden && document.querySelectorAll('#results-failed tr').length===0 && !document.querySelector('#failed-empty').hidden")
         assert browser.evaluate("state.verdict==='Authentic'")

@@ -59,20 +59,47 @@ show on the next refresh.
 ## 3. Attack simulation (`src/attacks/`)
 
 Attacks are registered with `@register(id, label, description, kinds)` and
-listed by `describe()`; the GUI, the suite and the tests share the registry.
-Media-level attacks need only the file. Payload-level attacks rewrite the
-embedded envelope in place and need an `AttackContext` with the LSB depth, the
-start unit and the steganography service.
+listed by `describe(kind)`; the GUI, the suite and the tests share the
+registry. The attack lab lists only the attacks that apply to the selected
+file's type (nothing until a file is chosen), plus the "Every attack" entry
+that runs the full suite. Media-level attacks need only the file.
+Payload-level attacks rewrite the embedded envelope in place and need an
+`AttackContext` with the LSB depth, the start unit and the steganography
+service.
 
-| Attack | Media | What it simulates |
+### Image files (PNG, BMP)
+
+| Attack | What it does | Simulates |
 |---|---|---|
-| `pixel_edit`, `region_edit` | image | a visible edit: one pixel, or a painted block |
-| `sample_edit`, `silence_tail` | audio | an audible edit: one click, or a muted tail |
-| `crop_bottom`, `truncate` | image, audio | trimming that leaves earlier content intact |
-| `resize`, `gain`, `jpeg_roundtrip` | image, audio | resampling, volume change, lossy compression |
-| `lsb_noise`, `lsb_strip` | both | invisible destruction of the hidden payload |
-| `reencode_lossless`, `convert_container` | image, audio | benign re-saves that should survive |
-| `edit_payload`, `corrupt_signature`, `wipe_payload` | both | tampering with the hidden data itself |
+| `pixel_edit` | flips the top bit of one channel of the centre pixel | the smallest visible edit |
+| `region_edit` | paints a solid block over the bottom-right tenth | a stamp or watermark |
+| `crop_bottom` | removes the bottom tenth of the rows | trimming that leaves earlier pixels intact |
+| `resize` | scales to 90% with resampling | every pixel recomputed |
+| `jpeg_roundtrip` | saves as JPEG quality 90 and converts back (alpha kept) | lossy compression |
+| `lsb_noise` | randomises the lowest bit of every channel | invisible payload destruction |
+| `lsb_strip` | clears the lowest bits at the chosen depth | invisible payload wipe |
+| `reencode_lossless` | decodes and re-saves in the same format | a benign re-save; must survive |
+| `convert_container` | rewrites the pixels as BMP (or PNG) | a benign conversion; RGBA PNGs lose alpha |
+
+### Audio files (16-bit PCM WAV)
+
+| Attack | What it does | Simulates |
+|---|---|---|
+| `sample_edit` | flips a high-order bit of the middle sample | a single click |
+| `silence_tail` | zeroes the last twentieth of the samples | a muted ending |
+| `truncate` | drops the last tenth of the samples | trimming that leaves earlier samples intact |
+| `gain` | scales every sample to 80% | a volume change |
+| `lsb_noise` | randomises the lowest bit of every sample | inaudible payload destruction |
+| `lsb_strip` | clears the lowest bits at the chosen depth | inaudible payload wipe |
+| `reencode_lossless` | rewrites the WAV with identical samples | a benign re-save; must survive |
+
+### Payload-level attacks (both file types)
+
+| Attack | What it does | Simulates |
+|---|---|---|
+| `edit_payload` | changes the media ID inside the signed JSON, signature untouched | forging the hidden record |
+| `corrupt_signature` | flips one bit in the embedded signature | a damaged or forged signature |
+| `wipe_payload` | overwrites the whole envelope with zeros | scrubbing the hidden data |
 
 ## 4. Automated test runner and evidence
 

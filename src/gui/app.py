@@ -27,7 +27,7 @@ class ApplicationWindow:
         self.runner = runner or AutomatedTestRunner()
         self.scenarios = scenarios
         self.attack_choice = tk.StringVar()
-        self.attack_output = tk.StringVar(value="Choose a stego file in the workspace, then an attack.")
+        self.attack_output = tk.StringVar()
         self.protected = None
         self.busy = False
         self._drag_offset = None
@@ -41,7 +41,7 @@ class ApplicationWindow:
         self.manual_start = tk.StringVar()
         self.output = tk.StringVar(value="Choose an original or stego file to begin.")
         self.verdict = tk.StringVar(value="Not verified")
-        self.test_output = tk.StringVar(value="You choose the evidence folder when the suite starts.")
+        self.test_output = tk.StringVar()
         self.test_summary = tk.StringVar(value="No test run yet")
 
     def __init__(self, root: tk.Tk, controller: ApplicationController,

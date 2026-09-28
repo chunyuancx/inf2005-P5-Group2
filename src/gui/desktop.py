@@ -82,7 +82,8 @@ class GlassDesktop(ApplicationWindow):
             "output": self.output.get(), "verdict": self.verdict.get(),
             "test_output": self.test_output.get(), "test_summary": self.test_summary.get(),
             "attack_output": self.attack_output.get(),
-            "attacks": describe(MediaType(self.media_kind()) if self.media_kind() else None),
+            # Only the attacks that apply to the selected file's type; none until a file is chosen.
+            "attacks": describe(MediaType(self.media_kind())) if self.media_kind() else [],
             "protected": self.protected is not None,
             "save_ready": self.protected is not None and self.verified_protected,
             "media_kind": self.media_kind(),

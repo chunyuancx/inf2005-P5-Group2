@@ -47,14 +47,18 @@ function render(next) {
     : 'Decides where the payload hides. Party B needs this same passphrase. It is never stored in the file.';
   $('#test-summary').textContent = next.test_summary;
   $('#test-output').textContent = next.test_output;
-  $('#attack-output').textContent = next.attack_output;
-  $('#attack-file').textContent = file ? `Selected: ${file}` : 'No file selected';
+  $('#attack-output').textContent = next.attack_output; $('#attack-output').hidden = !next.attack_output;
+  $('#test-output').hidden = !next.test_output;
+  $('#attack-filename').textContent = file || 'Choose a media file';
+  $('#attack-filename').title = next.path;
+  $('#attack-filedetail').textContent = file ? 'Selected and ready on this device' : 'PNG, BMP or WAV on this device';
   const attacks = JSON.stringify(next.attacks);
   if (attacks !== lastAttacks) {
     lastAttacks = attacks;
     const select = $('#attack-select'), current = select.value;
-    select.replaceChildren(...next.attacks.map(a => Object.assign(document.createElement('option'), {value: a.id, textContent: a.label})));
-    if (next.attacks.some(a => a.id === current)) select.value = current;
+    select.replaceChildren(Object.assign(document.createElement('option'), {value: SUITE, textContent: 'Every attack (full simulation suite)'}),
+      ...next.attacks.map(a => Object.assign(document.createElement('option'), {value: a.id, textContent: a.label})));
+    select.value = next.attacks.some(a => a.id === current) ? current : SUITE;
     describeAttack();
   }
   const rows = JSON.stringify(next.statuses);
@@ -108,10 +112,14 @@ function filterResults() {
 }
 $('#results-filter').addEventListener('input', filterResults);
 
+const SUITE = '__suite__';
 function describeAttack() {
-  const chosen = (state?.attacks || []).find(a => a.id === $('#attack-select').value);
-  $('#attack-description').textContent = chosen ? chosen.description + (chosen.targets_payload ? ' Needs the same depth and start location as the protected file.' : '')
-    : state?.media_kind ? 'Choose an attack.' : 'Choose a file in the workspace to see the attacks for its type.';
+  const value = $('#attack-select').value;
+  const chosen = (state?.attacks || []).find(a => a.id === value);
+  $('#attack-description').textContent = value === SUITE
+    ? 'Protects the bundled samples and your file, runs every attack and verifier case in both start modes, and writes JSON, log and Markdown evidence to a folder you choose.'
+    : chosen ? chosen.description + (chosen.targets_payload ? ' Needs the same depth and start location as the protected file.' : '')
+    : 'Choose a file to see the attacks for its type.';
 }
 $('#attack-select').addEventListener('change', describeAttack);
 
@@ -213,6 +221,7 @@ $$('[data-action]').forEach(button => button.addEventListener('click', async () 
     await action('manual_start', manualStart);
     manualDirty = false;
   }
+  if (name === 'attack' && $('#attack-select').value === SUITE) { await action('run_tests'); return; }
   await action(name, name === 'attack' ? $('#attack-select').value : undefined);
 }));
 $$('[data-depth]').forEach(button => button.addEventListener('click', () => action('depth', button.dataset.depth)));
