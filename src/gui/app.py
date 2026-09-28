@@ -342,7 +342,12 @@ class ApplicationWindow:
             raise IntegrationError("Enter the start-location passphrase.")
         locator.key = passphrase
 
-    def _inputs(self):
+    def _inputs(self, require_location=True):
+        """Selected path and LSB depth, with the start-location service configured.
+
+        ``require_location=False`` lets a media-level attack proceed without a
+        passphrase or position; the verification that follows will ask for it.
+        """
         if not self.path.get():
             raise IntegrationError("Choose an image or audio file first.")
         try:
@@ -351,7 +356,11 @@ class ApplicationWindow:
             raise IntegrationError("Choose an LSB depth from 1 to 8.") from exc
         if not 1 <= depth <= 8:
             raise IntegrationError("Choose an LSB depth from 1 to 8.")
-        self._apply_start_location()
+        try:
+            self._apply_start_location()
+        except IntegrationError:
+            if require_location:
+                raise
         return self.path.get(), depth
 
     def _set_busy(self, busy):
@@ -537,7 +546,8 @@ class ApplicationWindow:
             self.attack_output.set("Choose an attack first.")
             return
         try:
-            path, depth = self._inputs()
+            # Only payload-level attacks need the start location up front.
+            path, depth = self._inputs(require_location=attack.targets_payload)
         except IntegrationError as exc:
             self.attack_output.set(str(exc))
             return

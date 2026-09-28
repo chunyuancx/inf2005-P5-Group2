@@ -25,6 +25,7 @@ from src.testing.runner import Scenario
 SAMPLES = Path(__file__).resolve().parents[2] / "samples"
 DEFAULT_COVERS = (SAMPLES / "lambda-icon.png", SAMPLES / "audio" / "original.wav")
 PASSPHRASE = "group2 attack suite"
+MESSAGE = "INF2005 P5 Group 2 attack suite: hidden message"
 MANUAL_START = 100
 DEGRADED = "Passphrase mode derives the start from the content, so an edit moves the payload (docs section 7)."
 NO_SELF_CHECK = "Start recovery has no self-check, so a wrong location reads as Payload Missing (docs section 4)."
@@ -45,6 +46,7 @@ EXPECTED = {
     "jpeg_roundtrip": (Verdict.PAYLOAD_MISSING, Verdict.PAYLOAD_MISSING),
     "gain": (Verdict.PAYLOAD_MISSING, Verdict.PAYLOAD_MISSING),
     "edit_payload": (Verdict.SIGNATURE_INVALID, Verdict.SIGNATURE_INVALID),
+    "forge_message": (Verdict.SIGNATURE_INVALID, Verdict.SIGNATURE_INVALID),
     "corrupt_signature": (Verdict.SIGNATURE_INVALID, Verdict.SIGNATURE_INVALID),
     "wipe_payload": (Verdict.PAYLOAD_MISSING, Verdict.PAYLOAD_MISSING),
 }
@@ -79,7 +81,7 @@ class Bench:
 
     def protect(self, controller: ApplicationController, cover: Path, lsb: int, label: str) -> Path:
         stego = self.path(label, cover.suffix)
-        controller.save(controller.protect(str(cover), lsb), str(stego))
+        controller.save(controller.protect(str(cover), lsb, MESSAGE), str(stego))
         return stego
 
     @staticmethod
@@ -130,8 +132,9 @@ def attack_scenarios(bench: Bench, cover: Path, lsb: int, mode: str) -> list[Sce
             return controller.verify(str(attacked_path), lsb)
         return execute
 
+    # The clean case must also give back the hidden message it was protected with.
     cases.append(Scenario(f"{kind}/{mode}/lsb{lsb}/clean", Verdict.AUTHENTIC, run_attack("clean"),
-                          kind, lsb, mode=mode, attack="none"))
+                          kind, lsb, mode=mode, attack="none", expected_payload=MESSAGE))
     for attack in ATTACKS.values():
         if media_kind not in attack.kinds:
             continue

@@ -25,6 +25,7 @@ class Scenario:
     mode: str = "mock"
     attack: str = ""
     note: str = ""
+    expected_payload: str | None = None  # when set, the decoded hidden message must match too
 
 
 class AutomatedTestRunner:
@@ -37,9 +38,14 @@ class AutomatedTestRunner:
                    "passed": False, "statuses": {}, "error": None, "note": case.note}
             try:
                 result = case.execute()
+                decoded = getattr(result, "decoded_payload", None)
+                payload_ok = case.expected_payload is None or decoded == case.expected_payload
                 row.update(actual=result.verdict.value,
-                           passed=result.verdict == case.expected,
-                           statuses=dict(result.statuses), message=result.message)
+                           passed=result.verdict == case.expected and payload_ok,
+                           statuses=dict(result.statuses), message=result.message,
+                           decoded_payload=decoded)
+                if not payload_ok:
+                    row["error"] = f"decoded payload {decoded!r} != expected {case.expected_payload!r}"
             except Exception as exc:
                 # An execution error must fail even when Cannot Verify is expected.
                 row["error"] = f"{type(exc).__name__}: {exc}"

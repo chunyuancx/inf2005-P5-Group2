@@ -46,6 +46,20 @@ def edit_payload(media: Media, ctx: AttackContext) -> Media:
     return _reembed(media, ctx, json.dumps(content, sort_keys=True).encode("utf-8"), signature)
 
 
+@register("forge_message", "Forge the hidden message",
+          "Rewrites the hidden message text inside the signed payload while leaving the signature as it was.", BOTH,
+          targets_payload=True)
+def forge_message(media: Media, ctx: AttackContext) -> Media:
+    signed, signature, _ = _envelope(media, ctx)
+    try:
+        content = json.loads(signed)
+        metadata = content.setdefault("metadata", {})
+        metadata["payload"] = "forged: " + str(metadata.get("payload", ""))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise IntegrationError("The signed payload is not the expected JSON.") from exc
+    return _reembed(media, ctx, json.dumps(content, sort_keys=True).encode("utf-8"), signature)
+
+
 @register("corrupt_signature", "Corrupt the signature",
           "Flips one bit in the middle of the embedded signature.", BOTH, targets_payload=True)
 def corrupt_signature(media: Media, ctx: AttackContext) -> Media:

@@ -52,7 +52,11 @@ show on the next refresh.
   attack simulation. The attacked copy is saved as
   `attacks/<file name>/<date>_<time>_<attack>.<ext>` next to the source
   (never overwriting), selected, and verified immediately; the verdict is
-  shown in the lab and in the workspace card.
+  shown in the lab and in the workspace card. The verification step needs
+  the passphrase or manual position the file was protected with, exactly as
+  Party B would; payload-level attacks need it before they run, because they
+  must find the envelope to rewrite it. Media-level attacks run without it
+  and the verification then reports what is missing.
 - **Full simulation suite.** The first entry in the attack list runs the
   whole scenario suite (section 4) on the bundled samples plus the selected
   file. Each run writes its evidence to `run-<date>_<time>` inside the folder
@@ -101,6 +105,7 @@ service.
 | Attack | What it does | Simulates |
 |---|---|---|
 | `edit_payload` | changes the media ID inside the signed JSON, signature untouched | forging the hidden record |
+| `forge_message` | rewrites the hidden message text inside the signed JSON, signature untouched | forging what Party B reads |
 | `corrupt_signature` | flips one bit in the embedded signature | a damaged or forged signature |
 | `wipe_payload` | overwrites the whole envelope with zeros | scrubbing the hidden data |
 

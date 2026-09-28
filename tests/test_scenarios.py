@@ -13,6 +13,8 @@ def test_full_attack_suite_passes_and_writes_evidence(tmp_path):
     assert len(names) == len(set(names)) and len(names) >= 50
     assert {case.media_type for case in scenarios} == {"image", "audio"}
     assert {case.mode for case in scenarios} == {"manual", "auto"}
+    assert all(case.expected_payload for case in scenarios if case.attack == "none"), \
+        "clean scenarios must also check that the hidden message decodes"
     assert {case.expected for case in scenarios} == set(Verdict) - {Verdict.WRONG_START_LOCATION}, \
         "Wrong Start Location is unreachable today (docs section 4); every other verdict must be exercised"
 

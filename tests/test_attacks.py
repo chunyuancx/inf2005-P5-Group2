@@ -109,15 +109,17 @@ def controller(tmp_path):
 @pytest.mark.parametrize("cover", [IMAGE_COVER, AUDIO_COVER], ids=lambda p: p.suffix)
 @pytest.mark.parametrize("attack_id,expected", [
     ("edit_payload", Verdict.SIGNATURE_INVALID),
+    ("forge_message", Verdict.SIGNATURE_INVALID),
     ("corrupt_signature", Verdict.SIGNATURE_INVALID),
     ("wipe_payload", Verdict.PAYLOAD_MISSING),
 ])
 def test_payload_attacks_reach_the_expected_verdict(controller, tmp_path, cover, attack_id, expected):
     stego = tmp_path / f"stego{cover.suffix}"
-    controller.save(controller.protect(str(cover), 1), str(stego))
+    controller.save(controller.protect(str(cover), 1, "hello party B"), str(stego))
     media = load(stego)
     context = AttackContext(lsb=1, start=100, service=controller.service_for(media))
     attacked = tmp_path / f"attacked{cover.suffix}"
     attacked.write_bytes(apply_attack(attack_id, media, context).data)
     assert controller.verify(str(attacked), 1).verdict is expected
-    assert controller.verify(str(stego), 1).verdict is Verdict.AUTHENTIC
+    intact = controller.verify(str(stego), 1)
+    assert intact.verdict is Verdict.AUTHENTIC and intact.decoded_payload == "hello party B"
