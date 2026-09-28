@@ -46,6 +46,9 @@ class AutomatedTestRunner:
                            decoded_payload=decoded)
                 if not payload_ok:
                     row["error"] = f"decoded payload {decoded!r} != expected {case.expected_payload!r}"
+                elif case.expected_payload is not None:
+                    # Make the round trip visible in the table and the evidence files.
+                    row["note"] = f'Hidden message decoded: "{decoded}"' + (f" {row['note']}" if row["note"] else "")
             except Exception as exc:
                 # An execution error must fail even when Cannot Verify is expected.
                 row["error"] = f"{type(exc).__name__}: {exc}"
