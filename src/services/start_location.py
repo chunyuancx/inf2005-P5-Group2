@@ -7,33 +7,8 @@ Two modes:
     key + canonical cover  --HMAC-SHA256-->  nonce (4 bytes)
     key + nonce + bounds   --HMAC-SHA256-->  start unit index
 
-The nonce comes from the cover rather than a random source, so nothing has to
-be stored in the file for the reader to recover it.  That works because
-canonicalisation masks off the low ``lsb`` bits of every sample -- exactly the
-bits embedding overwrites -- so a cover and its stego output canonicalise to
-identical bytes and therefore produce an identical position.  Determinism is
-the requirement, not a weakness: a position that changed per run could not be
-found again at extraction time.
-
-*Manual* uses a caller-supplied position verbatim.  No passphrase is involved,
-and equally none protects it.
-
-Positions are flat unit indices, where a unit is one colour sample or one
-audio sample.  The functions below never touch a pixel, a sample, a hash or a
-signature; only ``KeyedStartLocation`` knows about concrete media services.
-Unit 0 is never produced, so a payload never begins at the very first unit.
-
-Limitations
------------
-* The same cover under the same passphrase always yields the same position.
-* At ``lsb == 8`` the mask clears every sample, so no cover content survives
-  canonicalisation and the position depends only on the passphrase and the
-  cover's format and dimensions.  This is inherent: at 8 bits there is no
-  cover content left to bind to.
-* Secrecy of the position rests entirely on secrecy of the passphrase.
-* The derivation reads decoded samples, so it does not survive re-encoding,
-  resampling or format conversion.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -105,14 +80,7 @@ def derive_nonce(key: bytes, canonical: bytes, lsb: int) -> bytes:
 
 def derive_start(unit_count: int, key: bytes, nonce: bytes,
                  payload_units: int) -> int:
-    """Return the unit index a payload of ``payload_units`` starts at.
-
-    The result is uniform over ``1 .. unit_count - payload_units``.  Index 0
-    is excluded so the payload never begins at the very first unit.
-
-    Raises ``IntegrationError`` when the payload cannot fit while still
-    leaving a non-zero start available.
-    """
+    # Return the unit index a payload of ``payload_units`` starts at.
     _check_positive(unit_count, "Unit count")
     if not isinstance(key, (bytes, bytearray)) or not key:
         raise IntegrationError("Start-location key must be non-empty bytes.")
@@ -140,11 +108,7 @@ def derive_start(unit_count: int, key: bytes, nonce: bytes,
 # ------------------------------------------------------------------ adapter
 
 class KeyedStartLocation:
-    """Supplies a start position for a given cover and LSB depth.
-
-    ``generate`` and ``recover`` run the same derivation -- there is no stored
-    state, which is what makes recovery possible.
-    """
+    # Supplies a start position for a given cover and LSB depth.
 
     def __init__(self, key: bytes | str = b""):
         self._key = b""
@@ -154,16 +118,12 @@ class KeyedStartLocation:
 
     @property
     def manual_start(self) -> int | None:
-        """A hand-picked start unit, or ``None`` to derive one from the key."""
+        #A hand-picked start unit, or ``None`` to derive one from the key.
         return self._manual_start
 
     @manual_start.setter
     def manual_start(self, value: int | None) -> None:
-        """Pin the start position, bypassing the keyed derivation.
-
-        No passphrase is required while a position is pinned, and equally none
-        protects it.  Set to ``None`` to return to keyed derivation.
-        """
+        # Pin the start position, bypassing the keyed derivation.
         if value is None:
             self._manual_start = None
             return
@@ -178,17 +138,13 @@ class KeyedStartLocation:
 
     @property
     def key(self) -> bytes:
-        """The passphrase the keyed derivation uses, as bytes."""
+        # The passphrase the keyed derivation uses, as bytes.
         return self._key
 
     @key.setter
     def key(self, value: bytes | str) -> None:
-        """Set the passphrase used by subsequent operations.
+        # Set the passphrase used by subsequent operations.
 
-        One instance is built at startup and assigned a passphrase before each
-        operation, because whoever verifies a file may supply a different one
-        than whoever protected it.  Accepts ``str`` and encodes it as UTF-8.
-        """
         if isinstance(value, str):
             value = value.encode("utf-8")
         elif isinstance(value, (bytes, bytearray)):
@@ -217,14 +173,8 @@ class KeyedStartLocation:
 
     @staticmethod
     def _reserve_units(unit_count: int) -> int:
-        """Units held back so the payload is guaranteed to fit.
+        # Units held back so the payload is guaranteed to fit.
 
-        ``generate()`` is called before the payload exists, so the position
-        must be chosen without knowing its length.  Reserving half the cover
-        guarantees room for any payload that will subsequently be accepted,
-        and costs one bit of search space.  Being a pure function of
-        ``unit_count``, ``recover()`` recomputes the identical reserve.
-        """
         return max(1, unit_count // 2)
 
     def _derive(self, media: Media, lsb: int) -> int:
@@ -249,7 +199,7 @@ class KeyedStartLocation:
 
     @staticmethod
     def _describe(media: Media, lsb: int) -> tuple[int, bytes]:
-        """Return (embeddable unit count, canonical bytes) for the cover."""
+        # Return (embeddable unit count, canonical bytes) for the cover.
         if media.kind == MediaType.IMAGE:
             from src.services.image_steganography import ImageSteganography
             return (ImageSteganography.unit_count(media),
