@@ -192,6 +192,7 @@ Each component has its own design notes under `docs/`:
 | Start location derivation | [docs/start_location.md](docs/start_location.md) |
 | Verification engine and system integration | [docs/verification_integration.md](docs/verification_integration.md) |
 | GUI, attack simulation and automated testing | [docs/gui_and_testing.md](docs/gui_and_testing.md) |
+| Verification results from the attack suite | [docs/test_evidence.md](docs/test_evidence.md) |
 
 ## Troubleshooting
 
