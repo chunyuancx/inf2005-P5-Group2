@@ -140,6 +140,18 @@ JPEG is rejected. Lossy compression destroys the low bits the payload occupies.
 
 Sample covers are provided under `samples/`.
 
+## Further information
+
+Each component has its own design notes under `docs/`:
+
+| Component | Document |
+|---|---|
+| Audio embedding and extraction | [docs/audio_steganography.md](docs/audio_steganography.md) |
+| Payload structure, hashing and signatures | [docs/crypto_doc.md](docs/crypto_doc.md) |
+| Start location derivation | [docs/start_location.md](docs/start_location.md) |
+| Verification engine and system integration | [docs/verification_integration.md](docs/verification_integration.md) |
+| GUI, attack simulation and automated testing | [docs/gui_and_testing.md](docs/gui_and_testing.md) |
+
 ## Troubleshooting
 
 **`ModuleNotFoundError: No module named 'cryptography'`**: the virtual
