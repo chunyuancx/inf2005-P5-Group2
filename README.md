@@ -140,6 +140,47 @@ JPEG is rejected. Lossy compression destroys the low bits the payload occupies.
 
 Sample covers are provided under `samples/`.
 
+## Expected outputs
+
+Protecting a valid PNG, BMP or 16-bit PCM WAV succeeds and enables **Save stego
+file**. The saved file is the same format and dimensions as the original, and
+looks unchanged to the eye.
+
+Verifying reports a verdict and a message in the verification panel, with a
+per-stage breakdown of location, payload, signature and hash.
+
+| Input | Verdict | Message |
+|---|---|---|
+| Stego file, correct passphrase and depth | **Authentic** | Signature and canonical media digest verified. |
+| Stego audio, correct passphrase and depth | **Authentic** | Signature and canonical media digest verified. |
+| Stego file, same manual position | **Authentic** | Signature and canonical media digest verified. |
+| An original cover that was never protected, verified with any passphrase or manual position | **Payload Missing** | No valid envelope at this location. |
+| Stego file, wrong passphrase | **Payload Missing** | No valid envelope at this location. |
+| Stego file, wrong LSB depth | **Payload Missing** | No valid envelope at this location. |
+| Stego file edited after protection, automatic mode | **Payload Missing** | No valid envelope at this location. |
+| Stego file edited after protection, manual mode | **Tampered** | Canonical media digest does not match. |
+| An unsupported format such as JPEG | **Cannot Verify** | Supported skeleton formats: PNG, BMP and PCM WAV. |
+| Any file, passphrase box left empty in automatic mode | **Cannot Verify** | Enter the start-location passphrase. |
+
+Verification needs a passphrase, or a manual position, before it will run at
+all. With the passphrase box empty, nothing is read from the file and the
+result is **Cannot Verify** rather than a verdict about the file's contents.
+
+The **Decoded payload** box is separate from the verdict and its message. It
+shows the recovered hidden message, reads `No decoded payload found.` after a
+verification that located nothing, and reads `No decoded payload yet.` before
+any verification has run on the current selection.
+
+An edited file gives different verdicts in the two start modes because
+automatic mode derives the position from the cover's own content, so editing
+the content moves the payload and it can no longer be located. Manual mode pins
+the position, so the payload is still found and the signature check reports the
+edit directly. Either way the file is rejected.
+
+Protect refuses rather than producing a file when the passphrase field is
+empty, when a manual position falls outside the cover, or when the payload will
+not fit at the chosen depth. The reason appears in the same message area.
+
 ## Further information
 
 Each component has its own design notes under `docs/`:
